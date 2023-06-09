@@ -1,4 +1,4 @@
-# Modelers and Storytellers: Transdisciplinary Training to Advance Community Health Intervention Research
+# Modelers and Storytellers
 
 This page contains the slides and tutorials for the 2023 *Modelers and Storytellers: Transdisciplinary Training to Advance Community Health Intervention Research* project.
 
@@ -11,7 +11,7 @@ This training is hosted by the UCLA Fielding School of Public Health (FSPH) and 
 #### July 6
 
 | Time          | Topic                                                                                                                                   | Instructor          |
-|:--------------|:----------------------------------------------------------------------------------------------------------------------------------------|:--------------------|
+|:----------------------|:------------------------|:------------------------|
 | 8:00a-10:00a  | Welcome, ice-breaker, and purpose/value of the training program Review syllabus, assign groups, pre-training knowledge evaluation, etc. | All R25 instructors |
 | 10:00a-10:30a | Break                                                                                                                                   |                     |
 | 10:30a-12:30p | Understand translational science and transdisciplinary (use obesity as an example)                                                      | All R25 instructors |
