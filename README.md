@@ -2,13 +2,11 @@
 
 This page contains the slides and tutorials for the 2023 *Modelers and Storytellers: Transdisciplinary Training to Advance Community Health Intervention Research* project.
 
-This training is hosted by the UCLA Fielding School of Public Health (FSPH) and sponsored by the National Institute of Child Health and Human Development (NICHD).
+This training is hosted by the [UCLA Fielding School of Public Health (FSPH)](https://ph.ucla.edu/) and sponsored by the National Institute of Child Health and Human Development (NICHD).
 
-## Syllabus
+## Introduction (July 6-7)
 
-### Module 0 (July 6-7): Introduction
-
-#### July 6
+### July 6
 
 | Time          | Topic                                                                                                                                   | Instructor          |
 |:----------------------|:------------------------|:------------------------|
@@ -19,10 +17,10 @@ This training is hosted by the UCLA Fielding School of Public Health (FSPH) and 
 | 1:00p-2:00p   | Activity                                                                                                                                | Christine Tran      |
 | 2:00p-3:00p   | Review/Get feedback from trainees                                                                                                       | All R25 instructors |
 
-### Module 1 (July 10-13): System Science
+## Module 1: System Science (July 10-13)
 
-### Module 2 (July 14-19): Community Health Science
+## Module 2: Community Health Science (July 14-19)
 
-### Module 3 (July 20-25): Data Science
+## Module 3: Data Science (July 20-25)
 
-### Practicum
+## Practicum
