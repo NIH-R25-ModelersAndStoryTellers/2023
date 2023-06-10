@@ -10,7 +10,7 @@ This training is hosted by the [UCLA Fielding School of Public Health (FSPH)](ht
 
 | Time          | Topic                                                                                                                                   | Instructor          |
 |:----------------------|:------------------------|:------------------------|
-| 8:00a-10:00a  | Welcome, ice-breaker, and purpose/value of the training program \ Review syllabus, assign groups, pre-training knowledge evaluation, etc. | All R25 instructors |
+| 8:00a-10:00a  | Welcome, ice-breaker, and purpose/value of the training program <br />Review syllabus, assign groups, pre-training knowledge evaluation, etc. | All R25 instructors |
 | 10:00a-10:30a | Break                                                                                                                                   |                     |
 | 10:30a-12:30p | Understand translational science and transdisciplinary (use obesity as an example)                                                      | All R25 instructors |
 | 12:30p-1:00p  | Break                                                                                                                                   |                     |
