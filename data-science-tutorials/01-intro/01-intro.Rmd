@@ -1,0 +1,194 @@
+---
+title: "The US Census and R Programming Language"
+output:
+  learnr::tutorial:
+    progressive: true
+    allow_skip: true
+runtime: shiny_prerendered
+description: >
+  Chapter 1 of the book [Analyzing US Census Data](https://walker-data.com/census-r/the-united-states-census-and-the-r-programming-language.html).
+---
+
+```{r setup, include=FALSE}
+library(learnr)
+library(tidyverse)
+
+tutorial_options(
+  exercise.timelimit = 60,
+  # A simple checker function that just returns the message in the check chunk
+  exercise.checker = function(check_code, ...) {
+    list(
+      message = eval(parse(text = check_code)),
+      correct = logical(0),
+      type = "info",
+      location = "append"
+    )
+  }
+)
+knitr::opts_chunk$set(error = TRUE)
+```
+
+## Introduction
+
+In this tutorial, we learn:
+
+* Basics of US Census data
+* Basics of R programming language
+
+This tutorial follow [Analyzing US Census Data](https://walker-data.com/census-r/the-united-states-census-and-the-r-programming-language.html) Chapter 1 and [_R for Data Science_](http://r4ds.had.co.nz/).
+
+## The US Census data
+
+### Census data: overview
+
+- **Decennial census data**. Every 10 years (1790, 1800, ..., 2010, 2020) administered by the [United States Census Bureau](https://www.census.gov/en.html). Complete enumeration of the US population to assist with _apportionment_. A limited set of questions on race, ethnicity, age, sex, and housing tenure.
+
+- **American Community Survey (ACS)**. Before the 2010 decennial Census, 1 in 6 Americans also received the Census long form, which asked a wider range of demographic questions on income, education, language, housing, and more. The Census long form has since been replaced by the American Community Survey, which is now the premier source of detailed demographic information about the US population. The ACS is mailed to approximately 3.5 million households per year (representing around 3 percent of the US population), allowing for annual data updates. The Census Bureau releases two ACS datasets to the public:
+
+    - **1-year ACS**: covers areas of population 65,000 and greater
+    
+    - **5-year ACS**: moving average of data over a 5-year period that covers geographies down to the Census block group. 
+    
+- ACS data are distinct from decennial Census data in that data represent _estimates_ rather than precise counts, and in turn are characterized by _margins of error_ around those estimates.
+
+- Due to COVID-19 pandemic, 2020 1-year ACS data will not be released, replaced by experimental estimates for that year.
+
+### Census hierarchy
+
+- Aggregate data from Census are made available to the public at _enumeration units_:
+
+<img src="https://walker-data.com/census-r/img/screenshots/census-hierarchies.png" alt="Census hierarchy of enumeration units" width="100%" />
+
+- The smallest unit made available from the decennial US Census is the _block_.
+
+- The smallest unit made available from the ACS is the _block group_.
+
+- Entities on the central axis are completely nested.
+
+<img src="https://walker-data.com/census-r/01-intro-to-the-census_files/figure-html/benton-tracts-1.png" alt="Census tracts are nexted in the county" width="100%" />
+
+- Some geographies do not nest within any parent geography at all, e.g., Zip Code Tabulation Area (ZCTA).
+
+<img src="https://walker-data.com/census-r/01-intro-to-the-census_files/figure-html/benton-zctas-1.png" alt="Census tracts are nexted in the county" width="100%" />
+
+### How to find Census data
+
+- [American FactFinder site](https://www.census.gov/acs/www/data/data-tables-and-tools/american-factfinder/) (decommissioned in 2020).
+
+- <https://data.census.gov/cedsci/>
+
+- US Census Bureau’s FTP site: <https://www2.census.gov/programs-surveys/>
+
+- Census API: <https://www.census.gov/data/developers/data-sets.html>
+
+- We will extensively use the **tidycensus** R package to access the Census API.
+
+## R introduction
+
+### Getting started with R
+
+- In this course, we mainly work on the interactive tutorials on <shinyapp.io>.
+
+- If you want to run the tutorials on your own computer, follow the following steps.
+
+    1. Download and install the appropriate version of R for your operating system from <https://cloud.r-project.org/>. 
+    
+    2. Download and install **RStudio** from <http://www.rstudio.com/download>.
+    
+    3. Open RStudio, `New Project...` -> `Version Control` -> `Git` -> set `Repository URL:` to `https://github.com/NIH-R25-ModelersAndStoryTellers/2023.git`. -> press `Create Project` button.
+
+### Basic data structures in R
+
+R as a calculator:
+```{r}
+2 + 3
+```
+
+Assignment:
+```{r}
+x <- 2 + 3
+```
+
+Display an object:
+```{r}
+x
+```
+
+Class of an object:
+```{r}
+class(x)
+```
+
+**Exercise 1**. Assign a string `"census"` to object `y` and inspect its class. Re-try using the single quote `'census`'; does that change the result?
+```{r ex-string, exercise = TRUE}
+
+```
+
+Data frames are the central object in many statistical analyses. A data frame is a rectangular object with each _row_ representing an individual observation and each _column_ representing a characteristic or attribute or feature or variable or predictor. 
+```{r}
+df <- data.frame(
+  v1 = c(2, 5, 1, 7, 4),
+  v2 = c(10, 2, 4, 2, 1),
+  v3 = c("a", "b", "c", "d", "e")
+)
+
+df
+```
+
+**Exercise 2**. Use the `tibble()` function in the **tidyverse** package to create the same data frame as above.
+```{r ex-tibble, exercise = TRUE}
+
+```
+
+### Functions and packages
+
+- Previous code chunk uses two functions:
+
+    - `data.frame()` creates a data frame from multiple vectors
+    
+    - `c()` creates a vector
+    
+- We may define our own function as
+```{r}
+multiply <- function(x, y) {
+  x * y
+}
+
+multiply(232, 7)
+```
+
+- In this course, we extensively use functions from many **packages**. Packages can be installed in R by `install.package()` function:
+```{r eval = FALSE}
+install.packages("tidycensus")
+```
+Once installed, functions from a package can be loaded into R environment by the `library()` command.
+```{r eval = FALSE}
+library(tidycensus)
+get_acs()
+```
+Alternatively, we can use the `package_name::function_name()` notation:
+```{r eval = FALSE}
+tidycensus::get_acs()
+```
+
+## Analyses using R and US Census data
+
+- Health resource access:
+
+<img src="https://walker-data.com/census-r/img/screenshots/recht-isochrones.png" width="100%" />
+
+- COVID-19 and pandemic response:
+
+<img src="https://walker-data.com/census-r/img/screenshots/worthington-vaccines.png" width="100%" />
+
+- Politics and gerrymandering:
+
+<img src="https://walker-data.com/census-r/01-intro-to-the-census_files/figure-html/iowa-redist-map-1.png" width="100%" />
+
+- Social and health equity research.
+
+- Census data visualization:
+
+<img src="https://walker-data.com/census-r/img/screenshots/mb-immigrants.png" width="100%" />
+
+- Create your own research question!

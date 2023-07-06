@@ -1,0 +1,267 @@
+---
+title: "Introduction to tidycensus"
+output:
+  learnr::tutorial:
+    progressive: true
+    allow_skip: true
+runtime: shiny_prerendered
+description: >
+  Chapter 2 of the book [Analyzing US Census Data](https://walker-data.com/census-r/the-united-states-census-and-the-r-programming-language.html).
+---
+
+```{r setup, include=FALSE}
+library(learnr)
+library(tidyverse)
+library(tidycensus)
+
+tutorial_options(
+  exercise.timelimit = 60,
+  # A simple checker function that just returns the message in the check chunk
+  exercise.checker = function(check_code, ...) {
+    list(
+      message = eval(parse(text = check_code)),
+      correct = logical(0),
+      type = "info",
+      location = "append"
+    )
+  }
+)
+knitr::opts_chunk$set(error = TRUE)
+```
+
+## Introduction
+
+In this tutorial, we learn core functions in the **tidycensus** package:
+
+- `get_decennial()`: request data from the US Decennial Census APIs for 2000, 2010, and 2020.  
+
+- `get_acs()`: request data from the 1-year and 5-year ACS samples. 1-year ACS back to 2005. 5-year ACS back to 2005-2009.
+
+- `get_estimates()`: interface to the Population Estimates APIs, which include yearly estimates of population characteristics by state, county, and metropolitan area, along with components of change demographic estimates like births, deaths, and migration rates.
+
+- `get_flows()`: interface to the ACS Migration Flows APIs, which include information on in- and out-flows from various geographies for the 5-year ACS samples, enabling origin-destination analyses.
+
+This tutorial follow [Analyzing US Census Data](https://walker-data.com/census-r/the-united-states-census-and-the-r-programming-language.html) Chapter 2 and [_R for Data Science_](http://r4ds.had.co.nz/).
+
+## Getting started with tidycensus
+
+Sign up for a Census API key at <https://api.census.gov/data/key_signup.html> and install the key:
+```{r}
+library(tidycensus)
+# census_api_key("YOUR KEY GOES HERE", install = TRUE)
+```
+
+### Decennial Census
+
+- Get data on total population by state from the 2010 decennial Census:
+```{r}
+total_population_10 <- get_decennial(
+  geography = "state", 
+  variables = "P001001",
+  year = 2010
+)
+
+total_population_10
+```
+
+**Exercise**. What is the class of `total_population_10`? How many rows and columns (hint: `nrow()` and `ncol()`)?
+```{r total-pop-10, exercise = TRUE}
+
+```
+
+- By default, `get_decennial()` uses the argument `sumfile = "sf1"`, which fetches data from the [decennial Census Summary File 1](https://www.census.gov/data/datasets/2010/dec/summary-file-1.html), which includes core demographic characteristics for Census geographies (2000 and 2010).
+
+- 2020 Decennial Census data are available from the [PL 94-171 Redistricting summary file](https://www.census.gov/programs-surveys/decennial-census/about/rdo/summary-files.html), which is specified with `sumfile = "pl"` and is also available for 2010. These variables include total population and housing units; race and ethnicity; voting-age population; and group quarters population.
+
+```{r}
+aian_2020 <- get_decennial(
+  geography = "state",
+  variables = "P1_005N",
+  year = 2020,
+  sumfile = "pl"
+)
+
+aian_2020
+```
+
+### American Community Survey
+
+- The number of residents born in Mexico by state (5-year ACS, 2016-2010):
+```{r}
+born_in_mexico <- get_acs(
+  geography = "state", 
+  variables = "B05006_150",
+  survey = "acs5",
+  year = 2020
+)
+
+born_in_mexico
+```
+
+**Exercise**. Change to year `2022`, what is the result?
+```{r acs5-2020, exercise = TRUE}
+
+```
+
+- The number of residents born in Mexico by state (1-year ACS, 2019):
+```{r}
+born_in_mexico_1yr <- get_acs(
+  geography = "state", 
+  variables = "B05006_150", 
+  survey = "acs1",
+  year = 2019
+)
+
+born_in_mexico_1yr
+```
+
+**Exercise**. Change to year `2020`, what is the result?  Change to year `2021`, what is the result? 
+```{r acs1-20220, exercise = TRUE}
+
+```
+
+## Geography and geographic subsets
+
+- For a listing of the geographies in tidycensus, see this [table](https://walker-data.com/census-r/an-introduction-to-tidycensus.html#geography-and-variables-in-tidycensus)
+
+- Median household income by county in California:
+```{r}
+ca_income <- get_acs(
+  geography = "county", 
+  variables = "B19013_001", 
+  state = "CA",
+  year = 2020
+)
+
+ca_income
+```
+
+**Exercise**. Find the county-level median household income for the State you live in or a state of research interest. 
+```{r median-household-income-2020, exercise = TRUE}
+
+```
+
+- Median household income by census tract in Los Angeles County of California:
+```{r}
+lacounty_income <- get_acs(
+  geography = "tract", 
+  variables = "B19013_001", 
+  state = "CA",
+  county = "Los Angeles",
+  year = 2020
+)
+
+lacounty_income
+```
+
+## Variable dictionary
+
+- All variables in the 2016 1-year ACS:
+```{r}
+v16 <- load_variables(2016, "acs1", cache = TRUE)
+
+v16
+```
+
+- Variables starting with `B19001`:
+```{r}
+v16 %>%
+  filter(str_detect(name, "B19001"))
+```
+
+- Household income groups by state for the 2016 1-year ACS (long format, `output = "tidy"`.
+```{r}
+get_acs(
+  geography = "state", 
+  table = "B19001", 
+  survey = "acs1",
+  year = 2016
+)
+```
+
+- Household income groups by state for the 2016 1-year ACS (wide format, `output = "tidy"`.
+```{r}
+get_acs(
+  geography = "state", 
+  table = "B19001", 
+  survey = "acs1",
+  year = 2016,
+  output = "wide"
+)
+```
+
+### Rename variables
+
+- Return the desired names rather than the Census variable IDs
+```{r}
+get_acs(
+  geography = "county",
+  state = "CA",
+  variables = c(medinc = "B19013_001",
+                medage = "B01002_001"),
+  year = 2020
+)
+```
+
+### Understand GEOIDs
+
+- Households by Census block from the 2020 Census in Los Angeles County, California.
+```{r}
+get_decennial(
+  geography = "block",
+  variables = "H1_001N",
+  state = "CA",
+  county = "Los Angeles",
+  year = 2020,
+  sumfile = "pl"
+)
+```
+
+- GEOID format:
+    - Digits 1-2: [Federal Information Processing Series (FIPS) code](https://www.census.gov/library/reference/code-lists/ansi.html) for the state.  
+    - Digits 3-5: County.  
+    - Digits 6-11: Census tract.  
+    - Digit 12: Block group.  
+    - Digits 13-15: Census block.  
+    
+## Other Census Bureau datasets
+
+### Using `get_estimates()`
+
+- [Population Estimates Program (PEP)](https://www.census.gov/programs-surveys/popest.html) provides yearly estimates of the US population and its components between decennial Censuses
+
+- The products available include "population", "components", "housing", and "characteristics".
+```{r}
+get_estimates(
+  geography = "county",
+  product = "components",
+  state = "CA",
+  county = "Los Angeles",
+  year = 2019
+)
+```
+
+- Break down `characteristics` by `AGEGROUP`, `RACE`, `SEX`, or `HISP`.
+```{r}
+get_estimates(
+  geography = "state",
+  product = "characteristics",
+  breakdown = c("SEX", "HISP"),
+  breakdown_labels = TRUE,
+  state = "CA",
+  year = 2019
+)
+```
+
+### Using `get_flows()`
+
+- The ACS Migration Flows API returns information on both in- and out-migration for states, counties, and metropolitan areas
+
+```{r}
+get_flows(
+  geography = "county",
+  state = "CA",
+  county = "Los Angeles",
+  year = 2019
+)
+```

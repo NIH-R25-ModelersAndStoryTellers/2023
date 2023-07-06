@@ -1,0 +1,192 @@
+---
+title: "Wrangling Census data"
+output:
+  learnr::tutorial:
+    progressive: true
+    allow_skip: true
+    toc-depth: 4
+runtime: shiny_prerendered
+description: >
+  Chapter 3 of the book [Analyzing US Census Data](https://walker-data.com/census-r/the-united-states-census-and-the-r-programming-language.html).
+---
+
+```{r setup, include=FALSE}
+library(learnr)
+library(tidyverse)
+library(tidycensus)
+
+tutorial_options(
+  exercise.timelimit = 60,
+  # A simple checker function that just returns the message in the check chunk
+  exercise.checker = function(check_code, ...) {
+    list(
+      message = eval(parse(text = check_code)),
+      correct = logical(0),
+      type = "info",
+      location = "append"
+    )
+  }
+)
+knitr::opts_chunk$set(error = TRUE)
+```
+
+## Introduction
+
+In this tutorial, we learn to:
+
+* wrangle census data using the **tidyverse** ecosystem
+
+This tutorial follow [Analyzing US Census Data](https://walker-data.com/census-r/the-united-states-census-and-the-r-programming-language.html) Chapter 3 and [_R for Data Science_](http://r4ds.had.co.nz/).
+
+## The tidyverse
+
+- **tidyverse** is a collection of R packages for data ingestion, wrangling, and visualization.
+
+<p align="center">
+<img src="./tidyverse_pkgs.jpeg" width="100%">
+</p>
+
+<p align="center">
+<img src="./tidyverse_categories.png" width="100%">
+</p>
+
+- The lead developer Hadley Wickham won the 2019 _COPSS Presidents’ Award_ (the Nobel Prize of Statistics)
+
+> for influential work in statistical computing, visualization, graphics, and data analysis; for developing and implementing an impressively comprehensive computational infrastructure for data analysis through R software; for making statistical thinking and computing accessible to large audience; and for enhancing an appreciation for the important role of statistics among data scientists.
+
+- Install the tidyverse ecosystem by `install.packages("tidyverse")`. You don't need to install on the server since it's already installed there.
+
+```{r eval = FALSE}
+library(tidyverse)
+library(tidycensus)
+```
+
+- The [Posit cheatsheets](https://posit.co/resources/cheatsheets/) can be very helpful for locating specific commands.
+
+## Exploring Census data with tidyverse tools
+
+### Row operations: sorting and filtering
+
+- Median age from the 2016-2020 ACS for all counties in the United States:
+```{r}
+median_age <- get_acs(
+  geography = "county",
+  variables = "B01002_001",
+  year = 2020
+)
+
+median_age
+```
+
+- Sort/arrange the rows by `estimate` (in increasing order):
+```{r}
+arrange(median_age, estimate)
+```
+
+- Sort/arrange the rows by `estimate` (in decreasing order):
+```{r}
+arrange(median_age, desc(estimate))
+```
+
+- Filter the data frame accrding to some condition(s). 
+```{r}
+filter(median_age, estimate >= 50)
+```
+
+### Column operations: separating and mutating
+
+- Separate one column into two:
+```{r}
+separate(
+  median_age,
+  NAME,
+  into = c("county", "state"),
+  sep = ", "
+)
+```
+
+- `summary_var` for normalizing. Compare the population of counties in California by race & Hispanic origin with their baseline populations, using data from the 2016-2020 ACS.
+```{r}
+race_vars <- c(
+  White = "B03002_003",
+  Black = "B03002_004",
+  Native = "B03002_005",
+  Asian = "B03002_006",
+  HIPI = "B03002_007",
+  Hispanic = "B03002_012"
+)
+
+ca_race <- get_acs(
+  geography = "county",
+  state = "CA",
+  variables = race_vars,
+  summary_var = "B03002_001",
+  year = 2020
+)
+
+ca_race
+```
+
+- By using dplyr’s `mutate()` function, we calculate a new column, `percent`, representing the percentage of each county’s population that corresponds to each racial/ethnic group in 2016-2020. The `select()` function, also in dplyr, retains only those columns that we need to view.
+```{r}
+ca_race_percent <- ca_race %>%
+  mutate(percent = 100 * (estimate / summary_est)) %>%
+  select(NAME, variable, percent)
+
+ca_race_percent
+```
+
+- The **pipe operator** `%>%` passes the result of a given line of code as the first argument of the code on the next line. 
+
+### Group-wise operation: split-apply-combine
+
+- Find the largest race/ethnicity group in each county in California:
+```{r}
+ca_race_percent %>%
+  group_by(NAME) %>%
+  filter(percent == max(percent))
+```
+
+- Find the median percentage of each race/ethnicity group in California:
+```{r}
+ca_race_percent %>%
+  group_by(variable) %>%
+  summarize(median_pct = median(percent))
+```
+
+- Household income data for California counties from the 2012-2016 ACS:
+```{r}
+ca_hh_income <- get_acs(
+  geography = "county",
+  table = "B19001",
+  state = "CA",
+  year = 2016
+)
+
+ca_hh_income
+```
+
+- Recode household income into groups: `below35k`, `bw35kand75k`, and `above75k`:
+```{r}
+ca_group_sums <- ca_hh_income %>%
+  filter(variable != "B19001_001") %>%
+  mutate(incgroup = case_when(
+    variable < "B19001_008" ~ "below35k", 
+    variable < "B19001_013" ~ "bw35kand75k", 
+    TRUE ~ "above75k"
+  )) %>%
+  group_by(GEOID, incgroup) %>%
+  summarize(estimate = sum(estimate))
+
+ca_group_sums
+```
+
+## Comparing ACS estimats over time
+
+- Change of geography name (e.g., county).
+
+- Change of variable name.
+
+## Handling margin of error in ACS
+
+TODO
