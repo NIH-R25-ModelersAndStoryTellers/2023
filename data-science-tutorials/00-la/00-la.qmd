@@ -1,0 +1,897 @@
+---
+title: "Communities in LA County: What Do We Know?"
+subtitle: R25 Modelers and Story Tellers
+author: "Drs. Hua Zhou and Roch Nianogo"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+format:
+  html:
+    theme: cosmo
+    embed-resources: true
+    number-sections: true
+    toc: true
+    toc-depth: 4
+    toc-location: left
+    code-fold: true
+knitr:
+  opts_chunk: 
+    fig.align: 'center'
+    fig.width: 6
+    fig.height: 4
+    message: FALSE
+    cache: false
+---
+
+```{r setup, include = FALSE}
+# library(learnr)
+library(tidyverse)
+library(tidycensus)
+census_api_key("e0ab5f4384b9bfa172dc4ed2991fe5fda8207b6d", install = TRUE, overwrite = TRUE)
+readRenviron("~/.Renviron")
+library(tigris)
+options(tigris_use_cache = TRUE)
+library(mapview)
+library(mapboxapi)
+mb_access_token("pk.eyJ1IjoiaHVhemhvdSIsImEiOiJjbGptZDYyc3AwemYxM2VscHkzdzlmOXdiIn0.BSJD9Eaca8Jg4fpTS0W1lw", install = TRUE, overwrite = TRUE)
+readRenviron("~/.Renviron")
+library(sf)
+library(tmap)
+library(scales)
+library(plotly)
+
+knitr::opts_chunk$set(error = TRUE)
+```
+
+## Introduction
+
+<!-- [QuickFacts](https://www.census.gov/quickfacts/fact/table/losangelescountycalifornia/PST045222) and [profile](https://data.census.gov/profile/Los_Angeles_County,_California?g=050XX00US06037) of Los Angeles Country (Census Bureau). -->
+
+UCLA is located in the Los Angeles County (LA County). Let us use various data science tools in R (tidyverse, tidycensus) to explore the demographics of the LA County. It gives a preview of the `Import` -> `Tidy` -> `Transform` -> `Visualize` workflow that we'll practice today and tomorrow. `Model` and `Communicate` will be the focus on Days 3 and 4.
+
+![](data-science.png)
+
+This dynamic document was produced by [Quarto](https://quarto.org/), which supports R, Python, and Julia. Detailed R syntax will be covered in the next tutorials.
+
+```{r, warning = FALSE}
+lac_acs_2020 <- get_acs(
+  geography = "tract",
+  county = c("Los Angeles"),
+  state = "CA",
+  variable = c(total_pop = "B01003_001"),
+  year = 2020,
+  geometry = TRUE,
+  output = "wide"
+) %>%
+  st_transform(4326)
+```
+
+There are **`r nrow(lac_acs_2020)`** census tracts in LA County. On average each census tract contains 4000 residents. These define our communities and we want to visualize health, income, education, housing, and health disparities in these communities.
+
+```{r}
+ucla_map <- tibble(
+  location = c("UCLA"), 
+  longitude = c(-118.444990),
+  latitude = c(34.070963)
+  ) %>%
+  st_as_sf(
+    coords = c("longitude", "latitude"),
+    crs = 4326
+    ) %>%
+  st_transform(4326) %>%
+  mapview(
+    col.regions = "red",
+    legend = FALSE
+    )
+
+mapview(lac_acs_2020, legend = FALSE) + ucla_map
+```
+
+<!-- ## Q&A -->
+
+<!-- ```{r lac-quiz-pop, echo = FALSE} -->
+<!-- question( -->
+<!--   "Which number is closest to the population size of LA County?", -->
+<!--   answer("1 million"), -->
+<!--   answer("10 million", correct = TRUE), -->
+<!--   answer("100 million"), -->
+<!--   answer("1000 million") -->
+<!-- ) -->
+<!-- ``` -->
+
+<!-- ```{r lac-quiz-empl, echo = FALSE} -->
+<!-- question( -->
+<!--   "Which number is closest to the employment rate of population 16 years and over in LA County?", -->
+<!--   answer("20%"), -->
+<!--   answer("40%"), -->
+<!--   answer("60%", correct = TRUE), -->
+<!--   answer("80%") -->
+<!-- ) -->
+<!-- ``` -->
+
+<!-- ```{r lac-quiz-medinc, echo = FALSE} -->
+<!-- question( -->
+<!--   "Which number is closest to the median household income in LA County?", -->
+<!--   answer("$50,000"), -->
+<!--   answer("$75,000", correct = TRUE), -->
+<!--   answer("$100,000"), -->
+<!--   answer("$150,000"), -->
+<!--   answer("$200,000") -->
+<!-- ) -->
+<!-- ``` -->
+
+## Population and people
+
+```{r}
+# 2022 Decennial Census data
+lac_dec_2020 <- get_decennial(
+  geography = "county",
+  state = "CA",
+  county = c("Los Angeles"),
+  variables = c(
+    total_pop = "P2_001N"
+  ),
+  year = 2020
+)
+
+# National population size from 2020 Decennial Census.
+uspop20 <- get_decennial(
+  geography = "state", 
+  variables = "P2_001N",
+  year = 2020
+)
+```
+
+LA metro area has **`r as.integer(sum(lac_dec_2020[["value"]]))`** residents, about **`r percent((sum(lac_dec_2020[["value"]])) / (sum(uspop20[["value"]])))`** of the US population (2020 Decennial Census).
+
+### Age and sex
+
+```{r}
+# 2021 1-year ACS data for LA County
+lac_acs1_2021 <- get_acs(
+  geography = "county",
+  county = c("Los Angeles"),
+  state = "CA",
+  year = 2021,
+  variables = c(med_age = "B01002_001"), 
+  survey = "acs1"
+)
+```
+
+The median age is **`r lac_acs1_2021 %>% filter(variable == "med_age") %>% .[["estimate"]]`** in LA County (2021 ACS).
+
+Population by Age and Sex (Pyramid Plot):
+```{r}
+# ingest
+lac_pyramid <- get_estimates(
+  geography = "county",
+  county = c("Los Angeles"),
+  state = "CA",
+  product = "characteristics",
+  breakdown = c("SEX", "AGEGROUP"),
+  breakdown_labels = TRUE,
+  year = 2019
+) %>% 
+  # wrangle
+  filter(
+    str_detect(AGEGROUP, "^Age"),
+    SEX != "Both sexes"
+    ) %>%
+  mutate(value = ifelse(SEX == "Male", -value, value)) %>%
+  # visualize
+  ggplot(aes(x = value, y = AGEGROUP, fill = SEX)) +
+  geom_col(width = 0.95, alpha = 0.75) +
+  theme_minimal(base_family = "Verdana", base_size = 12) +
+  scale_x_continuous(
+    labels = ~ number_format(scale = .001, suffix = "k")(abs(.x)),
+    limits = 1000000 * c(-0.5, 0.5)
+  ) +
+  scale_y_discrete(labels = ~ str_remove_all(.x, "Age\\s|\\syears")) +
+  scale_fill_manual(values = c("darkred", "navy")) +
+  labs(x = "",
+       y = "2019 ACS estimate",
+       title = "Population structure in Los Angeles County",
+       fill = "",
+       caption = "Data source: US Census Bureau population estimates")
+
+ggplotly(lac_pyramid)
+```
+
+```{r}
+# ingest
+senior_prop <- get_estimates(
+    geography = "county",
+    county = c("Los Angeles"),
+    state = "CA",
+    product = "characteristics",
+    breakdown = c("SEX", "AGEGROUP"),
+    breakdown_labels = TRUE,
+    year = 2019
+) %>% 
+  # wrangle
+  filter(
+    str_detect(AGEGROUP, "^Age"),
+    SEX != "Both sexes"
+) %>% 
+  mutate(AGEGROUP = as.ordered(AGEGROUP)) %>%
+  mutate(senior = AGEGROUP >= "Age 65 to 69 years") %>%
+  summarise(seniorprop = sum(senior * value) / sum(value))
+```
+
+**`r percent(senior_prop[[1, 1]], accuracy = 0.1)`** of Angelenos are 65 years and older（2014-2019 ACS).
+
+### Race and ethnicity
+
+```{r}
+# Count of races in each tract from the 2020 decennial census
+lac_race <- get_decennial(
+  geography = "tract",
+  state = "CA",
+  county = c("Los Angeles"),
+  variables = c(
+    Hispanic = "P2_002N",
+    White = "P2_005N",
+    Black = "P2_006N",
+    Native = "P2_007N",
+    Asian = "P2_008N"
+  ),
+  summary_var = "P2_001N",
+  year = 2020,
+  geometry = TRUE
+) %>%
+  mutate(percent = 100 * (value / summary_value))
+```
+
+```{r, include = FALSE}
+# Data dictionary
+load_variables(2020, dataset = "pl", cache = TRUE) %>%
+  filter(name %in% c("P2_002N", "P2_005N", "P2_006N", "P2_007N", "P2_008N", "P2_001N")) %>%
+  print(width = Inf)
+```
+
+#### Faceted maps
+
+Percentages of Asian, Black, Hispanic, Native, and White populations in each census tract in LA County.
+```{r}
+lac_race %>%
+  drop_na() %>%
+  tm_shape() +
+  tm_facets(by = "variable", scale.factor = 4) +
+  tm_fill(col = "percent",
+          style = "quantile",
+          n = 6,
+          palette = "Blues",
+          title = "Percent (2020 US Census)",) +
+  tm_layout(bg.color = "grey",
+            legend.position = c(-0.7, 0.15),
+            panel.label.bg.color = "white")
+```
+
+<!-- A shiny app? <https://github.com/walkerke/census-with-r-book/blob/f51bce08bfdd793357efd4d8ca5e2c0781502121/06-mapping-census-data.Rmd#L812> -->
+
+#### Dot-density map
+
+```{r, eval = FALSE}
+lac_dots <- lac_race %>%
+  drop_na() %>%
+  as_dot_density(
+    value = "value",
+    values_per_dot = 150,
+    group = "variable"
+  )
+
+background_tracts <- lac_race %>%
+  drop_na() %>%
+  filter(variable == "White")
+
+tm_shape(background_tracts) +
+  tm_polygons(col = "white",
+              border.col = "grey") +
+  tm_shape(lac_dots) +
+  tm_dots(col = "variable",
+          palette = "Set1",
+          size = 0.005,
+          title = "1 dot = 150 people") +
+  tm_layout(legend.outside = TRUE,
+            title = "Race/Ethnicity\n2020 Census")
+```
+
+![](lac_race_dot_density.png)
+
+<!-- Whites are concentrated in west LA, Glendale, South Bay, and Santa Clarita. Hispanic in South LA, San Fernando Valley, and Lancaster. Asians in San Gabriel Valley. Blacks in ??? -->
+
+### Segregation and diversity
+
+The following table tallies the segregation indices $H$ in major urban areas in California with population > 750,000. Higher $H$ indicates more segregation.
+```{r}
+library(segregation)
+
+# Get California tract data by race/ethnicity
+ca_acs_data <- get_acs(
+  geography = "tract",
+  variables = c(
+    white = "B03002_003",
+    black = "B03002_004",
+    asian = "B03002_006",
+    hispanic = "B03002_012"
+  ), 
+  state = "CA",
+  geometry = TRUE,
+  year = 2019
+) 
+
+# Use tidycensus to get urbanized areas by population with geometry, 
+# then filter for those that have populations of 750,000 or more
+us_urban_areas <- get_acs(
+  geography = "urban area",
+  variables = "B01001_001",
+  geometry = TRUE,
+  year = 2019,
+  survey = "acs1"
+) %>%
+  filter(estimate >= 750000) %>%
+  transmute(urban_name = str_remove(NAME, 
+                                    fixed(", CA Urbanized Area (2010)")))
+
+# Compute an inner spatial join between the California tracts and the 
+# urbanized areas, returning tracts in the largest California urban 
+# areas with the urban_name column appended
+ca_urban_data <- ca_acs_data %>%
+  st_join(us_urban_areas, left = FALSE) %>%
+  select(-NAME) %>%
+  st_drop_geometry()
+
+mutual_within(
+  data = ca_urban_data,
+  group = "variable",
+  unit = "GEOID",
+  weight = "estimate",
+  within = "urban_name",
+  wide = TRUE
+) %>%
+  select(urban_name, H) %>%
+  arrange(desc(H))
+```
+
+#### Local segregation analysis
+
+Patterns of segregation across the most segregated urban area, Los Angeles:
+```{r}
+la_local_seg <- ca_urban_data %>%
+  filter(urban_name == "Los Angeles--Long Beach--Anaheim") %>%
+  mutual_local(
+    group = "variable",
+    unit = "GEOID",
+    weight = "estimate", 
+    wide = TRUE
+  )
+
+la_tracts_seg <- tracts("CA", cb = TRUE, year = 2019) %>%
+  inner_join(la_local_seg, by = "GEOID") 
+
+la_tracts_seg %>%
+  ggplot(aes(fill = ls)) + 
+  geom_sf(color = NA) + 
+  coord_sf(crs = 26946) + 
+  scale_fill_viridis_c(option = "inferno") + 
+  theme_void() + 
+  labs(fill = "Local\nsegregation index")
+```
+
+### Language spoken at home
+
+```{r, include = FALSE}
+load_variables(year = 2021, dataset = "acs5/profile", cache = TRUE) %>%
+  filter(
+    str_detect(name, "DP02"), 
+    str_detect(label, "LANGUAGE SPOKEN AT HOME"),
+    str_detect(concept, "UNITED STATES")
+    ) %>%
+  print(n = Inf, width = Inf)
+```
+
+```{r}
+lac_lang <- get_acs(
+  geography = "county",
+  county = c("Los Angeles"),
+  state = "CA",
+  year = 2021,
+  variables = c(
+    English = "DP02_0113",
+    Spanish = "DP02_0116",
+    Indo_European = "DP02_0118",
+    Asian = "DP02_0120",
+    Other = "DP02_0122"
+  ),
+  summary_var = "DP02_0112",
+  survey = "acs5"
+  ) %>%
+  mutate(percent = estimate / summary_est)
+```
+
+**`r (lac_lang %>% filter(variable != "English") %>% .[["percent"]] %>% sum()) %>% percent(accuracy = 0.1)`** of Angelenos speak a language other than English at home (2016-2021 ACS).
+
+```{r}
+lac_lang_plot <- lac_lang %>%
+  ggplot(aes(x = fct_rev(fct_reorder(variable, percent)), y = percent)) + 
+  geom_col(width = 0.6) + 
+  scale_y_continuous(labels = scales::percent) +
+  labs(
+    title = "Languages spoken at home in LA County",
+    subtitle = "2016-2021 ACS, population 5 years and over",
+    x = "Language",
+    y = "Percent"
+  )
+
+ggplotly(lac_lang_plot)
+```
+
+### Native and foreign born
+
+```{r, include = FALSE}
+load_variables(year = 2021, dataset = "acs5/profile", cache = TRUE) %>%
+  filter(
+    str_detect(name, "DP02"), 
+    str_detect(label, "FOREIGN"),
+    str_detect(concept, "UNITED STATES")
+    ) %>%
+  print(n = Inf, width = Inf)
+```
+
+```{r}
+lac_foreignborn <- get_acs(
+  geography = "county",
+  county = c("Los Angeles"),
+  state = "CA",
+  year = 2021,
+  variables = c(
+    Total = "DP02_0105",
+    Europe = "DP02_0106",
+    Asia = "DP02_0107",
+    Africa = "DP02_0108",
+    Oceania = "DP02_0109",
+    Latin_America = "DP02_0110",
+    North_American = "DP02_0111"
+  ),
+  summary_var = "B01003_001",
+  survey = "acs5"
+  ) %>%
+  mutate(percent = estimate / summary_est)
+```
+
+**`r (lac_foreignborn %>% filter(variable != "Total") %>% .[["percent"]] %>% sum()) %>% percent(accuracy = 0.1)`** of Angelenos are foreign-born (2016-2021 ACS).
+
+```{r}
+lac_foreignborn_plot <- lac_foreignborn %>%
+  filter(variable != "Total") %>%
+  ggplot(aes(x = fct_rev(fct_reorder(variable, percent)), y = percent)) + 
+  geom_col(width = 0.6) + 
+  scale_y_continuous(labels = scales::percent) +
+  labs(
+    title = "Foreign born population in LA County",
+    subtitle = "2016-2021 ACS",
+    x = "Continent",
+    y = "Percent"
+  )
+
+ggplotly(lac_foreignborn_plot)
+```
+
+## Employment
+
+```{r}
+# 2021 1-year ACS data for LA County
+acs1_variables <- c(
+    total_population = "B01003_001",
+    med_age = "B01002_001",
+    med_house_val = "B25077_001",
+    med_rooms = "B25018_001",
+    med_year_built = "B25037_001",
+    med_income = "DP03_0062",
+    pct_college = "DP02_0068P",
+    pct_foreign_born = "DP02_0094P",
+    pct_insured = "DP03_0096P",
+    pct_ooh = "DP04_0046P",
+    pct_white = "DP05_0077P",
+    poverty_denom = "B17010_001",
+    poverty_num = "B17010_002",
+    pop_16above = "DP03_0001",
+    emp_16above = "DP03_0004"
+    )
+
+lac_acs1_2021 <- get_acs(
+  geography = "county",
+  county = c("Los Angeles"),
+  state = "CA",
+  year = 2021,
+  variables = c(
+    pop_16above = "DP03_0001",
+    emp_16above = "DP03_0004"
+  ), 
+  survey = "acs1"
+  )
+```
+
+The employment rate in population 16 years and over in LA County is **`r ((lac_acs1_2021 %>% filter(variable == "emp_16above") %>% .[["estimate"]] %>% sum()) / (lac_acs1_2021 %>% filter(variable == "pop_16above") %>% .[["estimate"]] %>% sum())) %>% percent(accuracy = 0.1)`** (2021 ACS).
+
+## Income and poverty
+
+```{r}
+lac_acs1_2021 <- get_acs(
+  geography = "county",
+  county = c("Los Angeles"),
+  state = "CA",
+  year = 2021,
+  variables = c(
+    med_income = "DP03_0062"
+  ), 
+  survey = "acs1"
+  )
+```
+
+The median household income in LA County is **$`r lac_acs1_2021 %>% filter(variable == "med_income") %>% .[["estimate"]] %>% as.integer()`** (2021 ACS).
+
+```{r, include = FALSE}
+load_variables(year = 2021, dataset = "acs1") %>%
+  filter(str_detect(label, "(?i)POVERTY"), !str_detect(concept, "PUERTO RICO")) %>%
+  view()
+  # print(width = Inf, n = Inf)
+```
+
+```{r}
+lac_poverty <- get_acs(
+  geography = "county",
+  state = "CA",
+  county = "Los Angeles",
+  year = 2021,
+  survey = "acs1",
+  variables = c(
+    total_poverty_0_99 = "B06012_002",
+    total_poverty_100_149 = "B06012_003",
+    total_poverty_150_above = "B06012_004"
+  )
+)
+```
+
+**`r percent(lac_poverty[[1, 4]] / (lac_poverty %>% summarize(total = sum(estimate)) %>% .[[1, 1]]), accuracy = 0.1)`** percentage of Angelenos live under the [poverty line](https://www.cdph.ca.gov/Programs/CID/DOA/Pages/OA_ADAP_Federal_Poverty_Guideline_Chart.aspx) (2021 ACS)!
+
+Poverty struck neighborhoods:
+```{r}
+library(tidycensus)
+library(ggiraph)
+library(tidyverse)
+library(patchwork)
+library(scales)
+
+lac_medincome <- get_acs(
+  geography = "tract",
+  variables = c(med_income = "DP03_0062"),
+  county = c("Los Angeles"),
+  state = "CA",
+  year = 2021,
+  survey = "acs5",
+  geometry = TRUE,
+  output = "wide"
+)
+```
+
+```{r}
+medinc_top10 <- lac_medincome %>%
+  slice_min(med_incomeE, n = 10) %>%
+  mutate(NAME = str_remove(NAME, ", Los Angeles County, California")) %>%
+  mutate(NAME = str_remove(NAME, "Census"))
+
+lametro_map <- ggplot() +
+  geom_sf(data = county_subdivisions(state = "CA", county = "Los Angeles", cb = TRUE) %>% filter(!GEOID %in% c("0603792360", "0603792140", "0603792110", "0603793090", "0603790015", "0603790810", "0603790810", "0603793730", "0603791730", "0603790730", "0603792400", "0603793510", "0603793200"))) +
+  geom_sf_interactive(
+    data = medinc_top10, 
+    mapping = aes(fill = med_incomeE, data_id = GEOID)
+    ) +
+  scale_fill_distiller(
+    palette = "Greens",
+    direction = 1,
+    guide = "none"
+    ) +
+  theme_void()
+
+lametro_plot <- ggplot(
+  data = medinc_top10, 
+  mapping = aes(x = med_incomeE, y = reorder(NAME, med_incomeE), fill = med_incomeE)
+  ) +
+  geom_errorbar(aes(xmin = med_incomeE - med_incomeM, xmax = med_incomeE + med_incomeM)) +
+  geom_point_interactive(
+    color = "black", 
+    size = 4, 
+    shape = 21,
+    aes(data_id = GEOID)
+    ) +
+  scale_fill_distiller(
+    palette = "Greens", 
+    direction = 1,
+    labels = label_dollar()
+    ) +
+  scale_x_continuous(labels = label_dollar()) +
+  labs(title = "Household income by census tract in LA County",
+       subtitle = "2016-2021 American Community Survey",
+       y = "",
+       x = "ACS estimate (bars represent margin of error)",
+       fill = "ACS estimate") +
+  theme_minimal(base_size = 14)
+
+girafe(ggobj = lametro_map + lametro_plot, width_svg = 10, height_svg = 5) %>%
+  girafe_options(opts_hover(css = "fill:red;"))
+```
+
+## Education
+
+```{r, include = FALSE}
+load_variables(year = 2020, dataset = "acs5") %>%
+  view()
+```
+
+```{r}
+lac_edu <- get_acs(
+  geography = "county", 
+  state = "CA", 
+  county = "Los Angeles",
+  year = 2020,
+  variables = c(
+    less_hs = "B06009_002",
+    hs = "B06009_003",
+    as = "B06009_004",
+    col = "B06009_005",
+    grad = "B06009_006"
+    ),
+  summary_var = "B06009_001"
+)
+```
+
+**`r percent(sum(lac_edu[["estimate"]][4:5]) / lac_edu[["summary_est"]][1], accuracy = 0.1)`** of the population aged 25 and up in LA County have a bachelor’s degree or higher (2016-2020 ACS).
+
+```{r}
+lac_pctcollege <- get_acs(
+  geography = "tract",
+  variables = c(pct_college = "DP02_0068P"),
+  county = c("Los Angeles"),
+  state = "CA",
+  year = 2020,
+  survey = "acs5",
+  geometry = TRUE,
+  output = "wide"
+)
+```
+
+```{r}
+mapview(lac_pctcollege, zcol = "pct_collegeE", layer = "% college") + ucla_map
+```
+
+## Commuting
+
+```{r, include = FALSE}
+load_variables(year = 2021, dataset = "acs5/profile") %>%
+  filter(str_detect(label, "COMMUTING")) %>%
+  view()
+```
+
+```{r}
+lac_commute <- get_acs(
+  geography = "county",
+  county = "Los Angeles",
+  state = "CA",
+  variables = c(
+    Drove_alone = "DP03_0019P",
+    Carpool = "DP03_0020P",
+    Public_transportation = "DP03_0021P",
+    Walk = "DP03_0022P",
+    Other_means = "DP03_0023P",
+    Work_from_home = "DP03_0024P",
+    Mean_travel_time_to_work_in_minutes = "DP03_0025"
+  ),
+  year = 2021
+)
+```
+
+```{r}
+lac_commute_plot <- lac_commute %>%
+  filter(!str_detect(variable, "Mean_travel_time")) %>%
+  ggplot() + 
+  geom_col(
+    aes(x = fct_rev(fct_reorder(variable, estimate)), y = estimate / 100),
+    width = 0.6
+    ) + 
+  scale_y_continuous(labels = scales::percent) +
+  labs(
+    title = "Commuting mode in LA County",
+    subtitle = "2016-2021 ACS",
+    x = NULL,
+    y = "Percent among workers 16 years and over"
+  )
+
+ggplotly(lac_commute_plot)
+```
+
+An average Angeleno worker (16 years or over) spends **`r lac_commute[["estimate"]][7]`** minutes commuting to work.
+
+```{r}
+get_acs(
+  geography = "tract",
+  variables = c(Commute_Time_in_Minutes = "DP03_0025"),
+  county = c("Los Angeles"),
+  state = "CA",
+  year = 2021,
+  survey = "acs5",
+  geometry = TRUE,
+  output = "wide"
+) %>%
+  # print() %>%
+  mapview(zcol = "Commute_Time_in_MinutesE", layer.name = "Minutes") + ucla_map
+```
+
+## Housing (rent burden)
+
+```{r, eval = FALSE}
+# PUMA in LA metro
+lametro_pumas <- pumas(state = "CA", cb = TRUE, year = 2019) %>%
+  filter(str_detect(NAME10, "(Los Angeles County|Orange County)"))
+
+# PUMS variable
+hh_variables <- c("PUMA", "GRPIP", "RAC1P",
+                  "HISP", "HHT")
+
+# ingest PUMS data
+# get_pums(
+#   variables = hh_variables,
+#   state = "CA",
+#   puma = lametro_pumas$PUMACE10,
+#   year = 2020,
+#   variables_filter = list(
+#     SPORDER = 1,
+#     TEN = 3
+#   ),
+#   recode = TRUE
+# ) %>%
+read_rds("lametro_hh_data.rds") %>%
+  # recode
+  mutate(
+    race_ethnicity = case_when(
+      HISP != "01" ~ "Hispanic",
+      HISP == "01" & RAC1P == "1" ~ "White",
+      HISP == "01" & RAC1P == "2" ~ "Black",
+      TRUE ~ "Other"
+    ),
+    married = case_when(
+      HHT == "1" ~ "Married",
+      TRUE ~ "Not married"
+    )
+  ) %>%
+  # group-wise summary
+  filter(race_ethnicity != "Other") %>%
+  group_by(race_ethnicity, married, PUMA) %>%
+  summarize(
+    prop_above_40 = sum(WGTP[GRPIP >= 40]) / sum(WGTP)
+  ) %>%
+  # join with PUMA
+  left_join(lametro_pumas, by = c("PUMA" = "PUMACE10")) %>%
+  # save as rds
+  write_rds(file = "lametro_data_for_map.rds") %>%
+  print()
+```
+
+```{r, eval = FALSE}
+library(tmap)
+
+read_rds("lametro_data_for_map.rds") %>%
+  st_as_sf() %>%
+  tm_shape() +
+  tm_facets(by = c("race_ethnicity", "married"), scale.factor = 6) +
+  tm_fill(col = "prop_above_40",
+          style = "quantile",
+          n = 5,
+          palette = "Blues",
+          title = "Percent households") +
+  tm_layout(bg.color = "grey",
+            legend.outside = TRUE,
+            panel.label.bg.color = "white",
+            main.title = "Rent burdened-households in LA County\n2016-2020 ACS estimate (from PUMS data)")
+```
+
+We define a household to be _rent-burdened_ when gross rent is 40 percent or more of household income.
+
+![](lac_rent_burden_map.png)
+
+
+```{r, eval = FALSE}
+library(survey)
+library(srvyr)
+
+read_rds("lametro_hh_replicate.rds") %>%
+  to_survey(type = "housing",
+            design = "rep_weights") %>%
+  filter(TEN == 3) %>%
+  mutate(
+    race_ethnicity = case_when(
+      HISP != "01" ~ "Hispanic",
+      HISP == "01" & RAC1P == "1" ~ "White",
+      HISP == "01" & RAC1P == "2" ~ "Black",
+      TRUE ~ "Other"
+    ),
+    married = case_when(
+      HHT == "1" ~ "Married",
+      TRUE ~ "Not married"
+    ),
+    above_40 = GRPIP >= 40
+  ) %>%
+  filter(race_ethnicity != "Other") %>%
+  group_by(race_ethnicity, married) %>%
+  summarize(
+    prop_above_40 = survey_mean(above_40)
+  ) %>%
+  # MOE
+  mutate(prop_above_40_moe = prop_above_40_se * 1.645,
+         label = paste(race_ethnicity, married, sep = ", "))  %>%
+  ggplot(aes(
+    x = prop_above_40,
+    y = reorder(label, prop_above_40)
+    )) +
+  geom_errorbar(aes(xmin = prop_above_40 - prop_above_40_moe,
+                     xmax = prop_above_40 + prop_above_40_moe)) +
+  geom_point(size = 3, color = "navy") +
+  labs(title = "Rent burdened-households in LA metro",
+       x = "2016-2020 ACS estimate (from PUMS data)",
+       y = "",
+       caption = "Rent-burdened defined when gross rent is 40 percent or more\nof household income. Error bars represent a 90 percent confidence level.") +
+  scale_x_continuous(labels = scales::percent) +
+  theme_grey(base_size = 12)
+```
+
+![](lac_rent_burden_plot.png)
+
+## Health
+
+### Insurance coverage and disparity
+
+```{r, include = FALSE}
+load_variables(
+  year = 2021,
+  dataset = 'acs5'
+) %>%
+  view()
+```
+
+```{r}
+lac_inscov <- get_acs(
+  geography = "county",
+  variables = c(
+    total = "B27011_001",
+    in_labor_force_employed_insured = "B27011_004",
+    in_labor_force_employed_uninsured = "B27011_007",
+    in_labor_force_unemployed_insured = "B27011_009",
+    in_labor_force_unemployed_uninsured = "B27011_012",
+    in_labor_force_employed_insured = "B27011_004",
+    notin_labor_force_uninsured = "B27011_014",
+    notin_labor_force_insured = "B27011_017"
+    ),
+  county = "Los Angeles",
+  state = "CA",
+  year = 2021,
+  survey = "acs1",
+  # output = "wide"
+)
+```
+
+**`r percent(sum(lac_inscov[["estimate"]][c(3, 5, 7)]) / lac_inscov[["estimate"]][1], accuracy = 0.1)`** of Angelenos don't have insurance (2021 ACS).
+
+
+```{r}
+lac_insured <- get_acs(
+  geography = "tract",
+  variables = c(pct_insured = "DP03_0096P"),
+  county = c("Los Angeles"),
+  state = "CA",
+  year = 2021,
+  geometry = TRUE,
+  output = "wide"
+)
+```
+
+```{r}
+mapview(lac_insured, zcol = "pct_insuredE", layer = "% insured") + ucla_map
+```
