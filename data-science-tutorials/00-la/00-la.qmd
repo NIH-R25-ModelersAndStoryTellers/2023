@@ -412,8 +412,9 @@ lac_lang <- get_acs(
 ```{r}
 lac_lang_plot <- lac_lang %>%
   ggplot(aes(x = fct_rev(fct_reorder(variable, percent)), y = percent)) + 
-  geom_col(width = 0.6) + 
-  scale_y_continuous(labels = scales::percent) +
+  geom_col(color = "navy", fill = "navy", 
+           alpha = 0.5, width = 0.4) + 
+  scale_y_continuous(labels = label_percent(scale = 100)) +
   labs(
     title = "Languages spoken at home in LA County",
     subtitle = "2016-2021 ACS, population 5 years and over",
@@ -463,8 +464,9 @@ lac_foreignborn <- get_acs(
 lac_foreignborn_plot <- lac_foreignborn %>%
   filter(variable != "Total") %>%
   ggplot(aes(x = fct_rev(fct_reorder(variable, percent)), y = percent)) + 
-  geom_col(width = 0.6) + 
-  scale_y_continuous(labels = scales::percent) +
+  geom_col(color = "navy", fill = "navy", 
+           alpha = 0.5, width = 0.5) + 
+  scale_y_continuous(labels = label_percent(scale = 100)) +
   labs(
     title = "Foreign born population in LA County",
     subtitle = "2016-2021 ACS",
@@ -695,6 +697,9 @@ lac_commute_plot <- lac_commute %>%
   ggplot() + 
   geom_col(
     aes(x = fct_rev(fct_reorder(variable, estimate)), y = estimate / 100),
+    color = "navy", 
+    fill = "navy", 
+    alpha = 0.5,
     width = 0.6
     ) + 
   scale_y_continuous(labels = scales::percent) +
@@ -895,3 +900,27 @@ lac_insured <- get_acs(
 ```{r}
 mapview(lac_insured, zcol = "pct_insuredE", layer = "% insured") + ucla_map
 ```
+
+## Roadmap
+
+July 20:
+
+- 8:10 am - 9 am: [Preface: Communities in Los Angeles County](https://nih-r25-modelersandstorytellers.github.io/2023/data-science-tutorials/00-la/00-la.html).
+
+- 9 am - 9:10 am: Break. 
+
+- 9:10 am - 10 am [US Census data and R programming language](https://huazhou.shinyapps.io/R25-2023-01-intro).
+
+- 10 am - 10:30 am: Break.
+
+- 10:30 am - 11:30 am: [tidycensus](https://huazhou.shinyapps.io/R25-2023-02-tidycensus/).
+
+- 11:30 am - 11:40 am: Break.
+
+- 11:40 am - 12:30 pm: [Data wrangling using tidyverse](https://huazhou.shinyapps.io/R25-2023-03-wrangle/).
+
+- 12:30 pm - 1 pm: Break.
+
+- 1 pm - 2 pm: [Visualizing census data](https://huazhou.shinyapps.io/R25-2023-04-censusvis/).
+
+- 2 pm - 3 pm: Office hour (on Zoom).
