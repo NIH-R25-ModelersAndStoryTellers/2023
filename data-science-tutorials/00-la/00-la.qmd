@@ -85,38 +85,9 @@ ucla_map <- tibble(
 mapview(lac_acs_2020, legend = FALSE) + ucla_map
 ```
 
-<!-- ## Q&A -->
+## A quiz about LA County
 
-<!-- ```{r lac-quiz-pop, echo = FALSE} -->
-<!-- question( -->
-<!--   "Which number is closest to the population size of LA County?", -->
-<!--   answer("1 million"), -->
-<!--   answer("10 million", correct = TRUE), -->
-<!--   answer("100 million"), -->
-<!--   answer("1000 million") -->
-<!-- ) -->
-<!-- ``` -->
-
-<!-- ```{r lac-quiz-empl, echo = FALSE} -->
-<!-- question( -->
-<!--   "Which number is closest to the employment rate of population 16 years and over in LA County?", -->
-<!--   answer("20%"), -->
-<!--   answer("40%"), -->
-<!--   answer("60%", correct = TRUE), -->
-<!--   answer("80%") -->
-<!-- ) -->
-<!-- ``` -->
-
-<!-- ```{r lac-quiz-medinc, echo = FALSE} -->
-<!-- question( -->
-<!--   "Which number is closest to the median household income in LA County?", -->
-<!--   answer("$50,000"), -->
-<!--   answer("$75,000", correct = TRUE), -->
-<!--   answer("$100,000"), -->
-<!--   answer("$150,000"), -->
-<!--   answer("$200,000") -->
-<!-- ) -->
-<!-- ``` -->
+<https://huazhou.shinyapps.io/R25-2023-00-la-quiz/>
 
 ## Population and people
 
