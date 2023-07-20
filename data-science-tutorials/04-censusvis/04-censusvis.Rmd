@@ -1,5 +1,6 @@
 ---
 title: "Visualizing Census data"
+author: "Drs. Hua Zhou and Roch Nianogo"
 output:
   learnr::tutorial:
     progressive: true
@@ -14,6 +15,15 @@ description: >
 library(learnr)
 library(tidyverse)
 library(tidycensus)
+census_api_key("e0ab5f4384b9bfa172dc4ed2991fe5fda8207b6d", install = TRUE, overwrite = TRUE)
+library(tigris)
+options(tigris_use_cache = TRUE)
+library(mapview)
+library(mapboxapi)
+mb_access_token("pk.eyJ1IjoiaHVhemhvdSIsImEiOiJjbGptZDYyc3AwemYxM2VscHkzdzlmOXdiIn0.BSJD9Eaca8Jg4fpTS0W1lw", install = TRUE, overwrite = TRUE)
+readRenviron("~/.Renviron")
+library(sf)
+library(tmap)
 
 tutorial_options(
   exercise.timelimit = 60,
@@ -32,11 +42,13 @@ knitr::opts_chunk$set(error = TRUE)
 
 ## Introduction
 
+![](https://d33wubrfki0l68.cloudfront.net/795c039ba2520455d833b4034befc8cf360a70ba/558a5/diagrams/data-science-explore.png)
+
 In this tutorial, we learn to:
 
-* visualize Census data using **ggplot2** and other plotting packages.
+* Visualize Census data using **ggplot** and other plotting packages.
 
-This tutorial follow [Analyzing US Census Data](https://walker-data.com/census-r/the-united-states-census-and-the-r-programming-language.html) Chapter 4 and [_R for Data Science_](http://r4ds.had.co.nz/).
+Resources: [Analyzing US Census Data](https://walker-data.com/census-r/the-united-states-census-and-the-r-programming-language.html) Chapter 4 and [R for Data Science](http://r4ds.had.co.nz/).
 
 ## Basic visualization
 
@@ -47,8 +59,10 @@ library(tidycensus)
 ca_wide <- get_acs(
   geography = "county",
   state = "CA",
-  variables = c(medinc = "B19013_001",
-                medage = "B01002_001"),
+  variables = c(
+    medinc = "B19013_001",
+    medage = "B01002_001"
+    ),
   output = "wide",
   year = 2020
 )
@@ -56,52 +70,105 @@ ca_wide <- get_acs(
 ca_wide
 ```
 
-- Our first **ggplot2** figure is a **histogram** of median income:
+- Our first **ggplot** figure is a **histogram** of median income:
 ```{r}
 library(tidyverse)
+# avoid using scientific notation
 options(scipen = 999)
 
-ggplot(ca_wide, aes(x = medincE)) + 
-  geom_histogram()
+ggplot(ca_wide) + 
+  geom_histogram(aes(x = medincE))
 ```
 
-    - `options(scipen = 999)` instructs R to avoid using scientific notation
+**Exercise**. Display the documentation for `geom_histogram()`.
+```{r ex-geom-histogram-doc, exercise = TRUE}
+
+```
+
+```{r ex-geom-histogram-doc-solution}
+?geom-histogram
+```
     
-    -  By default, `geom_histogram` uses 30 bins
+**Exercise**. By default, `geom_histogram` uses 30 bins. Change the `bins` argument to other values. 
+```{r ex-geom-histogram-bins, exercise = TRUE}
+ca_wide <- get_acs(
+  geography = "county",
+  state = "CA",
+  variables = c(
+    medinc = "B19013_001",
+    medage = "B01002_001"
+    ),
+  output = "wide",
+  year = 2020
+)
 
-```{r}
-library(tidyverse)
-options(scipen = 999)
-
-ggplot(ca_wide, aes(x = medincE)) + 
-  geom_histogram(bins = 15)
-```    
-
-- Boxplot:
-```{r}
-ggplot(ca_wide, aes(y = medincE)) + 
-  geom_boxplot()
+ggplot(ca_wide) + 
+  geom_histogram(aes(x = medincE), bins = 30)
 ```
 
-- Relationship between two variables by scatterplot:
-```{r}
-ggplot(ca_wide, aes(x = medageE, y = medincE)) + 
-  geom_point()
+```{r ex-geom-histogram-bins-solution}
+ca_wide <- get_acs(
+  geography = "county",
+  state = "CA",
+  variables = c(
+    medinc = "B19013_001",
+    medage = "B01002_001"
+    ),
+  output = "wide",
+  year = 2020
+)
+
+ggplot(ca_wide) + 
+  geom_histogram(aes(x = medincE), bins = 15)
 ```
-Overlay with a linear model fit:
+
+**Exercise**. Display the histogram of the median ages. 
+```{r ex-geom-histogram-medage, exercise = TRUE, exercise.setup = "ex-geom-histogram-bins"}
+
+```
+
+```{r ex-geom-histogram-medage-solution}
+ggplot(ca_wide) + 
+  geom_histogram(aes(x = medageE), bins = 15)
+```
+
+- Boxplot of the median household income:
+```{r}
+ggplot(ca_wide) + 
+  geom_boxplot(aes(y = medincE))
+```
+
+**Exercise**. Display the boxplot of the median ages. 
+```{r ex-geom-boxplot-medage, exercise = TRUE, exercise.setup = "ex-geom-histogram-bins"}
+
+```
+
+```{r ex-geom-boxplot-medage-solution}
+ggplot(ca_wide) + 
+  geom_boxplot(aes(y = medageE))
+```
+
+- Plot the relationship between two variables by a **scatterplot**:
+```{r}
+ggplot(ca_wide) + 
+  geom_point(aes(x = medageE, y = medincE))
+```
+
+- Overlay with a linear model fit. Note that both `geom_point()` and `geom_smooth` layers inherit the mapping `aes(x = medageE, y = medincE)`.
 ```{r}
 ggplot(ca_wide, aes(x = medageE, y = medincE)) + 
   geom_point() + 
   geom_smooth(method = "lm")
 ```
-Overlay with a non-linear model fit:
+
+- Overlay with a non-linear model fit:
 ```{r}
 ggplot(ca_wide, aes(x = medageE, y = medincE)) + 
   geom_point() + 
   geom_smooth(method = "loess")
 ```
 
-## Customizing ggplot2 visualization
+## Customizing ggplot visualization
 
 - Suppose we want to illustrate the percent of commuters that take public transportation to work for the largest metropolitan areas in the United States, using data from the 2019 1-year ACS.
 ```{r}
@@ -109,12 +176,13 @@ library(tidycensus)
 library(tidyverse)
 
 metros <-  get_acs(
-  geography = "cbsa",
-  variables = "DP03_0021P",
-  summary_var = "B01003_001",
+  geography = "cbsa",         # metropolitan statistical area/micropolitan statistical area
+  variables = "DP03_0021P",   # percentage of public transportation commuters
+  summary_var = "B01003_001", # total population
   survey = "acs1",
   year = 2019
 ) %>%
+  # 10 most populous CBSAs
   slice_max(summary_est, n = 20)
 
 metros
@@ -122,8 +190,8 @@ metros
 
 - Bar chart:
 ```{r}
-ggplot(metros, aes(x = NAME, y = estimate)) + 
-  geom_col()
+ggplot(metros) + 
+  geom_col(aes(x = NAME, y = estimate))
 ```
 
 - Shorten metro names, reorder by the percentage (`estimat`), rotate the bar chart, and more meaningful title and axis labels:
@@ -138,7 +206,7 @@ metros %>%
        subtitle = "2019 1-year ACS estimates", 
        y = "", 
        x = "ACS estimate", 
-       caption = "Source: ACS Data Profile variable DP03_0021P via the tidycensus R package") 
+       caption = "Source: ACS Data Profile variable DP03_0021P") 
 ```
 
 - More styles:
@@ -157,24 +225,23 @@ metros %>%
        subtitle = "2019 1-year ACS estimates", 
        y = "", 
        x = "ACS estimate", 
-       caption = "Source: ACS Data Profile variable DP03_0021P via the tidycensus R package") 
+       caption = "Source: ACS Data Profile variable DP03_0021P") 
 ```
 
 ## Visualizing margins of error
 
 - Let's visualize the median household incomes of counties in the state of California from the 2016-2020 ACS.
 
-- Counties and population sizes:
+- California counties and population sizes:
 ```{r}
 ca <- get_decennial(
   state = "CA",
   geography = "county",
   variables = c(totalpop = "P1_001N"),
   year = 2020
-) %>%
-  arrange(desc(value))
-
-ca
+  ) %>%
+  arrange(desc(value)) %>%
+  print()
 ```
 
 - Median household incomes:
@@ -185,9 +252,8 @@ ca_income <- get_acs(
   variables = c(hhincome = "B19013_001"),
   year = 2020
 ) %>%
-  mutate(NAME = str_remove(NAME, " County, California"))
-
-ca_income
+  mutate(NAME = str_remove(NAME, " County, California")) %>%
+  print()
 ```
 
 - Basic plot:
@@ -214,6 +280,7 @@ ggplot(ca_income, aes(x = estimate, y = reorder(NAME, estimate))) +
        y = "") + 
   scale_x_continuous(labels = label_dollar())
 ```
+
 What do we observe?
 ```{r}
 ca %>% arrange(value)
@@ -221,9 +288,9 @@ ca %>% arrange(value)
 
 ## Visualize ACS estimates over time
 
-- Let's obtain 1-year ACS data from 2005 through 2019 on median home value for Deschutes County, Oregon, home to the city of Bend and large numbers of in-migrants in recent years from the Bay Area in California. 
+- Let's obtain 1-year ACS data from 2005 through 2021 (no 2020 ACS data) on median home value for Deschutes County, Oregon, home to the city of Bend and large numbers of in-migrants in recent years from the Bay Area in California. 
 ```{r}
-years <- 2005:2019
+years <- c(2005:2019, 2021)
 names(years) <- years
 
 deschutes_value <- map_dfr(years, ~{
@@ -235,25 +302,28 @@ deschutes_value <- map_dfr(years, ~{
     year = .x,
     survey = "acs1"
   )
-}, .id = "year")
-
-deschutes_value
+}, .id = "year") %>%
+  print()
 ```
 
 - A stylized plot:
 ```{r}
 ggplot(deschutes_value, aes(x = year, y = estimate, group = 1)) + 
-  geom_ribbon(aes(ymax = estimate + moe, ymin = estimate - moe), 
-              fill = "navy",
-              alpha = 0.4) + 
+  geom_ribbon(
+    aes(ymax = estimate + moe, ymin = estimate - moe), 
+    fill = "navy",
+    alpha = 0.4
+    ) + 
   geom_line(color = "navy") + 
   geom_point(color = "navy", size = 2) + 
   theme_minimal(base_size = 12) + 
   scale_y_continuous(labels = label_dollar(scale = .001, suffix = "k")) + 
-  labs(title = "Median home value in Deschutes County, OR",
-       x = "Year",
-       y = "ACS estimate",
-       caption = "Shaded area represents margin of error around the ACS estimate")
+  labs(
+    title = "Median home value in Deschutes County, OR",
+    x = "Year",
+    y = "ACS estimate",
+    caption = "Shaded area represents margin of error around the ACS estimate"
+    )
 ```
 
 ## Exploring age and sex structure with population pyramids
@@ -267,24 +337,25 @@ ca <- get_estimates(
   breakdown = c("SEX", "AGEGROUP"),
   breakdown_labels = TRUE,
   year = 2019
-)
-
-ca
+) %>%
+  print()
 ```
 
 - Remove rows for `Both sexes` and flip values of `Male` to negative.
 ```{r}
-ca_filtered <- filter(ca, str_detect(AGEGROUP, "^Age"), 
-                  SEX != "Both sexes") %>%
-  mutate(value = ifelse(SEX == "Male", -value, value))
-
-ca_filtered
+ca_filtered <- ca %>%
+  filter(
+    str_detect(AGEGROUP, "^Age"), 
+    SEX != "Both sexes"
+    ) %>%
+  mutate(value = ifelse(SEX == "Male", -value, value)) %>%
+  print()
 ```
 
 - Pyramid plot:
 ```{r}
-ggplot(ca_filtered, aes(x = value, y = AGEGROUP, fill = SEX)) + 
-  geom_col()
+ggplot(ca_filtered) + 
+  geom_col(aes(x = value, y = AGEGROUP, fill = SEX))
 ```
 
 - A more stylized pyramid:
@@ -346,7 +417,78 @@ ggplot(us_pyramid_data, aes(x = prop, y = AGEGROUP, fill = SEX)) +
 
 ## Visualizing group-wise comparison
 
-TODO
+Southern California housing 
+```{r}
+housing_val <- get_acs(
+  geography = "tract", 
+  variables = "B25077_001", 
+  state = "CA", 
+  county = c(
+    "Imperial",
+    "Los Angeles",
+    "Orange", 
+    "San Diego", 
+    "Santa Barbara",
+    "Ventura"
+  ),
+  year = 2020
+) %>% 
+  separate(
+    NAME,
+    into = c("tract", "county", "state"),
+    sep = ", "
+    ) %>%
+  group_by(county) %>%
+  print()
+```
+
+Summary statistics:
+```{r}
+housing_val %>%
+  summarize(
+    min = min(estimate, na.rm = TRUE), 
+    mean = mean(estimate, na.rm = TRUE), 
+    median = median(estimate, na.rm = TRUE), 
+    max = max(estimate, na.rm = TRUE)
+    ) %>%
+  arrange(desc(median)) %>%
+  print()
+```  
+
+Density plots:
+```{r}
+ggplot(housing_val, aes(x = estimate, fill = county)) + 
+  geom_density(alpha = 0.3)
+```
+
+Facet plots:
+```{r}
+ggplot(housing_val, aes(x = estimate)) +
+  geom_density(fill = "darkgreen", color = "darkgreen", alpha = 0.5) + 
+  facet_wrap(~county) + 
+  scale_x_continuous(labels = dollar_format(scale = 0.000001, 
+                                            suffix = "m")) + 
+  theme_minimal(base_size = 14) + 
+  theme(axis.text.y = element_blank(), 
+        axis.text.x = element_text(angle = 45)) + 
+  labs(x = "ACS estimate",
+       y = "",
+       title = "Median home values by Census tract, 2015-2019 ACS")
+```
+
+Ridgeline plots:
+```{r}
+library(ggridges)
+
+ggplot(housing_val, aes(x = estimate, y = county)) + 
+  geom_density_ridges() + 
+  theme_ridges() + 
+  labs(x = "Median home value: 2016-2020 ACS estimate", 
+       y = "") + 
+  scale_x_continuous(labels = label_dollar(scale = .000001, suffix = "m"),
+                     breaks = c(0, 500000, 1000000)) + 
+  theme(axis.text.x = element_text(angle = 45))
+```
 
 ## Interactive visualization with plotly
 

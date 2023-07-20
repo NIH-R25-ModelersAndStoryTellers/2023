@@ -1,5 +1,6 @@
 ---
 title: "The US Census and R Programming Language"
+author: "Drs. Hua Zhou and Roch Nianogo"
 output:
   learnr::tutorial:
     progressive: true
@@ -12,6 +13,12 @@ description: >
 ```{r setup, include=FALSE}
 library(learnr)
 library(tidyverse)
+library(tidycensus)
+census_api_key("e0ab5f4384b9bfa172dc4ed2991fe5fda8207b6d", install = TRUE, overwrite = TRUE)
+library(tigris)
+options(tigris_use_cache = TRUE)
+library(sf)
+library(mapview)
 
 tutorial_options(
   exercise.timelimit = 60,
@@ -30,40 +37,65 @@ knitr::opts_chunk$set(error = TRUE)
 
 ## Introduction
 
+![](https://d33wubrfki0l68.cloudfront.net/795c039ba2520455d833b4034befc8cf360a70ba/558a5/diagrams/data-science-explore.png)
+
 In this tutorial, we learn:
 
 * Basics of US Census data
 * Basics of R programming language
 
-This tutorial follow [Analyzing US Census Data](https://walker-data.com/census-r/the-united-states-census-and-the-r-programming-language.html) Chapter 1 and [_R for Data Science_](http://r4ds.had.co.nz/).
+Resources: [Analyzing US Census Data](https://walker-data.com/census-r/the-united-states-census-and-the-r-programming-language.html) Chapter 1 and [R for Data Science](http://r4ds.had.co.nz/).
 
 ## The US Census data
 
 ### Census data: overview
 
+US Constitution Article I, Sections 2 and 9:
+
+> The actual enumeration shall be made within three years after the first meeting of the Congress of the United States, and within every subsequent term of ten years, in such manner as they shall by law direct.
+
 - **Decennial census data**. Every 10 years (1790, 1800, ..., 2010, 2020) administered by the [United States Census Bureau](https://www.census.gov/en.html). Complete enumeration of the US population to assist with _apportionment_. A limited set of questions on race, ethnicity, age, sex, and housing tenure.
 
-- **American Community Survey (ACS)**. Before the 2010 decennial Census, 1 in 6 Americans also received the Census long form, which asked a wider range of demographic questions on income, education, language, housing, and more. The Census long form has since been replaced by the American Community Survey, which is now the premier source of detailed demographic information about the US population. The ACS is mailed to approximately 3.5 million households per year (representing around 3 percent of the US population), allowing for annual data updates. The Census Bureau releases two ACS datasets to the public:
+- **American Community Survey (ACS)**. Before the 2010 decennial Census, 1 in 6 Americans also received the Census long form, which asked a wider range of demographic questions on income, education, language, housing, and more. The Census long form has since been replaced by the American Community Survey, which is now the premier source of detailed demographic information about the US population. The ACS is mailed to approximately 3.5 million households per year (around 3\% of the US population), allowing for annual data updates. The Census Bureau releases two ACS datasets to the public:
 
     - **1-year ACS**: covers areas of population 65,000 and greater
     
     - **5-year ACS**: moving average of data over a 5-year period that covers geographies down to the Census block group. 
     
-- ACS data are distinct from decennial Census data in that data represent _estimates_ rather than precise counts, and in turn are characterized by _margins of error_ around those estimates.
+- ACS data are distinct from decennial Census data in that data represent **estimates** rather than precise counts, and in turn are characterized by **margins of error** around those estimates.
 
 - Due to COVID-19 pandemic, 2020 1-year ACS data will not be released, replaced by experimental estimates for that year.
 
 ### Census hierarchy
 
-- Aggregate data from Census are made available to the public at _enumeration units_:
+- Aggregate data from Census are made available to the public at **enumeration units**:
 
 <img src="https://walker-data.com/census-r/img/screenshots/census-hierarchies.png" alt="Census hierarchy of enumeration units" width="100%" />
 
-- The smallest unit made available from the decennial US Census is the _block_.
+- The smallest unit made available from the decennial US Census is the **block**.
 
-- The smallest unit made available from the ACS is the _block group_.
+- The smallest unit made available from the ACS is the **block group** (average 39 blocks per block group).
 
 - Entities on the central axis are completely nested.
+
+```{r, include = FALSE}
+lac_tracts <- tracts(state = "CA", county = "Los Angeles", cb = TRUE)
+
+ggplot(lac_tracts) + 
+  geom_sf() + 
+  theme_void() + 
+  labs(title = "Census tracts in LA County")
+```
+
+```{r, include = FALSE}
+lac_zctas <- zctas(state = "CA", year = 2010)
+
+st_filter(lac_tracts, lac_zctas, .predicate = st_intersects) %>%
+  ggplot() + 
+  geom_sf() + 
+  theme_void() + 
+  labs(title = "ZCTAs in LA County")
+```
 
 <img src="https://walker-data.com/census-r/01-intro-to-the-census_files/figure-html/benton-tracts-1.png" alt="Census tracts are nexted in the county" width="100%" />
 
@@ -71,15 +103,20 @@ This tutorial follow [Analyzing US Census Data](https://walker-data.com/census-r
 
 <img src="https://walker-data.com/census-r/01-intro-to-the-census_files/figure-html/benton-zctas-1.png" alt="Census tracts are nexted in the county" width="100%" />
 
+- Los Angeles Unified School District:
+```{r, echo = FALSE}
+school_districts(state = "CA", cb = TRUE) %>% 
+  filter(str_detect(NAME, "Los Angeles")) %>% 
+  mapview(legend = FALSE)
+```
+
 ### How to find Census data
 
-- [American FactFinder site](https://www.census.gov/acs/www/data/data-tables-and-tools/american-factfinder/) (decommissioned in 2020).
+- Exploration of Census data: <https://data.census.gov/cedsci/>
 
-- <https://data.census.gov/cedsci/>
+- Census API for programmatic access: <https://www.census.gov/data/developers/data-sets.html>
 
-- US Census Bureau’s FTP site: <https://www2.census.gov/programs-surveys/>
-
-- Census API: <https://www.census.gov/data/developers/data-sets.html>
+- FTP site for bulk download: <https://www2.census.gov/programs-surveys/>
 
 - We will extensively use the **tidycensus** R package to access the Census API.
 
@@ -89,7 +126,7 @@ This tutorial follow [Analyzing US Census Data](https://walker-data.com/census-r
 
 - In this course, we mainly work on the interactive tutorials on <shinyapp.io>.
 
-- If you want to run the tutorials on your own computer, follow the following steps.
+- If you want to run the tutorials on your own computer, follow the below steps. I may demonstrate this process in the afternoon.
 
     1. Download and install the appropriate version of R for your operating system from <https://cloud.r-project.org/>. 
     
@@ -119,9 +156,20 @@ Class of an object:
 class(x)
 ```
 
-**Exercise 1**. Assign a string `"census"` to object `y` and inspect its class. Re-try using the single quote `'census`'; does that change the result?
+**Exercise**. Assign a string `"census"` to object `y` and inspect its class. Re-try using the single quote `'census`'; does that change the result?
 ```{r ex-string, exercise = TRUE}
 
+```
+
+```{r ex-string-solution}
+y <- "census"
+y
+class(y)
+
+# single quote is equivalent to double quote in R
+y <- 'census'
+y
+class(y)
 ```
 
 Data frames are the central object in many statistical analyses. A data frame is a rectangular object with each _row_ representing an individual observation and each _column_ representing a characteristic or attribute or feature or variable or predictor. 
@@ -135,9 +183,36 @@ df <- data.frame(
 df
 ```
 
-**Exercise 2**. Use the `tibble()` function in the **tidyverse** package to create the same data frame as above.
+Here the `c()` function combines the arguments into a vector. In R, we can read the documentation of a function by `?function_name` or `help(function_name)`. 
+
+**Exercise**. Display the documentation for the function `c()`.
+```{r ex-fundoc, exercise = TRUE}
+
+```
+
+```{r ex-fundoc-solution}
+?c
+```
+
+We extensively use an enhanced version of data frame called `tibble`, available from the **tidyverse** ecosystem.
+
+**Exercise**. Use the `tibble()` function in the **tidyverse** package to create the same data frame as above.
 ```{r ex-tibble, exercise = TRUE}
 
+```
+
+```{r ex-tibble-solution}
+# load tidyverse ecosystem
+library(tidyverse)
+
+tbl <- tibble(
+  v1 = c(2, 5, 1, 7, 4),
+  v2 = c(10, 2, 4, 2, 1),
+  v3 = c("a", "b", "c", "d", "e")  
+)
+
+tbl
+class(tbl)
 ```
 
 ### Functions and packages
@@ -164,11 +239,28 @@ install.packages("tidycensus")
 Once installed, functions from a package can be loaded into R environment by the `library()` command.
 ```{r eval = FALSE}
 library(tidycensus)
+
 get_acs()
 ```
 Alternatively, we can use the `package_name::function_name()` notation:
 ```{r eval = FALSE}
 tidycensus::get_acs()
+```
+
+**Exercise**. Display the documentation for the function `rnorm()`.
+```{r ex-rnorm-doc, exercise = TRUE}
+
+```
+
+```{r ex-rnorm-doc-solution}
+?rnorm
+```
+
+- When calling an R function, arguments can be matched _positionally_ or by name. Following calls of `rnorm()` are all valid.
+```{r, eval = FALSE}
+rnorm(100, 2, 1) # positional match
+rnorm(sd = 1, mean = 2, n = 100) # name match
+rnorm(mean = 2, 100) # mixed
 ```
 
 ## Analyses using R and US Census data

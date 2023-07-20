@@ -1,5 +1,6 @@
 ---
 title: "Wrangling Census data"
+author: "Drs. Hua Zhou and Roch Nianogo"
 output:
   learnr::tutorial:
     progressive: true
@@ -14,6 +15,8 @@ description: >
 library(learnr)
 library(tidyverse)
 library(tidycensus)
+census_api_key("e0ab5f4384b9bfa172dc4ed2991fe5fda8207b6d", install = TRUE, overwrite = TRUE)
+readRenviron("~/.Renviron")
 
 tutorial_options(
   exercise.timelimit = 60,
@@ -32,29 +35,31 @@ knitr::opts_chunk$set(error = TRUE)
 
 ## Introduction
 
+![](https://d33wubrfki0l68.cloudfront.net/795c039ba2520455d833b4034befc8cf360a70ba/558a5/diagrams/data-science-explore.png)
+
 In this tutorial, we learn to:
 
-* wrangle census data using the **tidyverse** ecosystem
+* Wrangle census data using the **tidyverse** ecosystem
 
-This tutorial follow [Analyzing US Census Data](https://walker-data.com/census-r/the-united-states-census-and-the-r-programming-language.html) Chapter 3 and [_R for Data Science_](http://r4ds.had.co.nz/).
+Resources: [Analyzing US Census Data](https://walker-data.com/census-r/the-united-states-census-and-the-r-programming-language.html) Chapter 3 and [R for Data Science](http://r4ds.had.co.nz/).
 
 ## The tidyverse
 
 - **tidyverse** is a collection of R packages for data ingestion, wrangling, and visualization.
 
 <p align="center">
-<img src="./tidyverse_pkgs.jpeg" width="100%">
+<img src="https://cdn.analyticsvidhya.com/wp-content/uploads/2019/05/ggplot_hive.jpg" width="75%">
 </p>
 
 <p align="center">
-<img src="./tidyverse_categories.png" width="100%">
+<img src="https://rviews.rstudio.com/post/2017-06-09-What-is-the-tidyverse_files/tidyverse1.png" width="75%">
 </p>
 
 - The lead developer Hadley Wickham won the 2019 _COPSS Presidents’ Award_ (the Nobel Prize of Statistics)
 
 > for influential work in statistical computing, visualization, graphics, and data analysis; for developing and implementing an impressively comprehensive computational infrastructure for data analysis through R software; for making statistical thinking and computing accessible to large audience; and for enhancing an appreciation for the important role of statistics among data scientists.
 
-- Install the tidyverse ecosystem by `install.packages("tidyverse")`. You don't need to install on the server since it's already installed there.
+- Install the tidyverse ecosystem by `install.packages("tidyverse")`. You don't need to install now since it's already installed on the server.
 
 ```{r eval = FALSE}
 library(tidyverse)
@@ -65,13 +70,13 @@ library(tidycensus)
 
 ## Exploring Census data with tidyverse tools
 
-### Row operations: sorting and filtering
+### Row operations: sort/arrange, filter, slice
 
 - Median age from the 2016-2020 ACS for all counties in the United States:
 ```{r}
 median_age <- get_acs(
   geography = "county",
-  variables = "B01002_001",
+  variables = "B01002_001", # median age
   year = 2020
 )
 
@@ -88,12 +93,42 @@ arrange(median_age, estimate)
 arrange(median_age, desc(estimate))
 ```
 
-- Filter the data frame accrding to some condition(s). 
+- Filter the rows according to some condition(s). 
 ```{r}
 filter(median_age, estimate >= 50)
 ```
 
-### Column operations: separating and mutating
+- Slice the 10 counties with highest median age:
+```{r}
+slice_max(median_age, estimate, n = 10)
+```
+
+- Slice the 10 counties with lowest median age:
+```{r}
+slice_min(median_age, estimate, n = 10)
+```
+
+**Exercise**. Find the 5 counties in California (or your favorite state) with lowest median age.
+```{r ex-ca-county-lowest-medage, exercise = TRUE}
+median_age <- get_acs(
+  geography = "county",
+  variables = "B01002_001", # median age
+  year = 2020
+)
+```
+
+```{r ex-ca-county-lowest-medage-solution}
+get_acs(
+  geography = "county",
+  state = "California",
+  variables = "B01002_001", # median age
+  year = 2020
+  ) %>%
+  # filter(str_detect(NAME, "California")) %>%
+  slice_min(estimate, n = 5)
+```
+
+### Column operations: separate, mutate, select
 
 - Separate one column into two:
 ```{r}
@@ -120,23 +155,21 @@ ca_race <- get_acs(
   geography = "county",
   state = "CA",
   variables = race_vars,
-  summary_var = "B03002_001",
+  summary_var = "B03002_001", # total population
   year = 2020
-)
-
-ca_race
+) %>%
+  print()
 ```
 
 - By using dplyr’s `mutate()` function, we calculate a new column, `percent`, representing the percentage of each county’s population that corresponds to each racial/ethnic group in 2016-2020. The `select()` function, also in dplyr, retains only those columns that we need to view.
 ```{r}
 ca_race_percent <- ca_race %>%
   mutate(percent = 100 * (estimate / summary_est)) %>%
-  select(NAME, variable, percent)
-
-ca_race_percent
+  select(NAME, variable, percent) %>%
+  print()
 ```
 
-- The **pipe operator** `%>%` passes the result of a given line of code as the first argument of the code on the next line. 
+- Extremely important: The **pipe operator** `%>%` passes the result of a given line of code as the first argument of the code on the next line. 
 
 ### Group-wise operation: split-apply-combine
 
@@ -144,14 +177,18 @@ ca_race_percent
 ```{r}
 ca_race_percent %>%
   group_by(NAME) %>%
-  filter(percent == max(percent))
+  slice_max(percent) %>%
+  ## syntactically same  
+  # filter(percent == max(percent)) %>% 
+  print()
 ```
 
 - Find the median percentage of each race/ethnicity group in California:
 ```{r}
 ca_race_percent %>%
   group_by(variable) %>%
-  summarize(median_pct = median(percent))
+  summarize(median_pct = median(percent)) %>%
+  print()
 ```
 
 - Household income data for California counties from the 2012-2016 ACS:
@@ -161,9 +198,8 @@ ca_hh_income <- get_acs(
   table = "B19001",
   state = "CA",
   year = 2016
-)
-
-ca_hh_income
+  ) %>%
+  print()
 ```
 
 - Recode household income into groups: `below35k`, `bw35kand75k`, and `above75k`:
@@ -173,20 +209,227 @@ ca_group_sums <- ca_hh_income %>%
   mutate(incgroup = case_when(
     variable < "B19001_008" ~ "below35k", 
     variable < "B19001_013" ~ "bw35kand75k", 
-    TRUE ~ "above75k"
+    TRUE ~ "above75k" # all other values
   )) %>%
   group_by(GEOID, incgroup) %>%
-  summarize(estimate = sum(estimate))
-
-ca_group_sums
+  summarize(estimate = sum(estimate)) %>%
+  print()
 ```
 
 ## Comparing ACS estimats over time
 
-- Change of geography name (e.g., county).
+### Potential problems
 
-- Change of variable name.
+- Change of geography name (e.g., county). <https://www.census.gov/programs-surveys/acs/technical-documentation/table-and-geography-changes.html>
 
-## Handling margin of error in ACS
+Suppose we are interested studying Oglala Lakota County, South Dakota. 5-year ACS estimates from 2016-2022.
+```{r}
+oglala_lakota_age <- get_acs(
+  geography = "county",
+  state = "SD",
+  county = "Oglala Lakota",
+  table = "B01001",
+  year = 2020
+) %>%
+  print()
+```
 
-TODO
+5-year ACS estimates from 2006-2010:
+```{r error = TRUE}
+oglala_lakota_age_10 <- get_acs(
+  geography = "county",
+  state = "SD",
+  county = "Oglala Lakota",
+  table = "B01001",
+  year = 2010
+) %>%
+  print()
+```
+
+We run into troubles! The reason is that Oglala Lakota County had a different name in 2010, Shannon County. Changing to `county = "Shannon"` fixes the problem.
+```{r}
+oglala_lakota_age_10 <- get_acs(
+  geography = "county",
+  state = "SD",
+  county = "Shannon",
+  table = "B01001",
+  year = 2010
+)
+
+oglala_lakota_age_10
+```
+
+- Change of variable name. 
+
+    Percentage of residents age 25 and up with a 4-year college degree for counties in Colorado from the 2019 1-year ACS.
+```{r}
+get_acs(
+  geography = "county",
+  variables = "DP02_0068P",
+  state = "CO",
+  survey = "acs1",
+  year = 2019
+)
+```
+
+    How about 2018 1-year ACS?
+```{r}
+get_acs(
+  geography = "county",
+  variables = "DP02_0068P",
+  state = "CO",
+  survey = "acs1",
+  year = 2018
+)
+```
+Numbers are not percentages! Variable IDs for the Data Profile are unique to each year.
+
+- The safest option for time-series analysis in the ACS is to use the Comparison Profile Tables. These tables are available for both the 1-year and 5-year ACS, and allow for comparison of demographic indicators over the past five years for a given year. Using the Comparison Profile tables also brings the benefit of additional variable harmonization, such as inflation-adjusted income estimates.
+
+ACS Comparison Profile on inflation-adjusted median household income for Los Angeles County. For the 2016-2020 ACS, the “comparison year” is 2015, representing the closest non-overlapping 5-year dataset, which in this case is 2011-2015. We can examine the results, which are inflation-adjusted for appropriate comparison:
+```{r}
+get_acs(
+  geography = "county",
+  variables = c(
+    income2015 = "CP03_2015_062",
+    income2020 = "CP03_2020_062"
+  ),
+  county = "Los Angeles",
+  state = "CA",
+  year = 2020
+)
+```
+
+### Iterating over ACS years
+
+Estimates of populations age 25+ who have finished a 4-year degree or graduate degrees, by sex, are available from the B15002 table.
+```{r}
+college_vars <- c("B15002_015",
+                  "B15002_016",
+                  "B15002_017",
+                  "B15002_018",
+                  "B15002_032",
+                  "B15002_033",
+                  "B15002_034",
+                  "B15002_035")
+```
+
+We’ll now use these variables to request data on college degree holders from the ACS for counties in California for each of the 1-year ACS surveys from 2010 to 2019.
+```{r}
+years <- c(2010:2019, 2021)
+names(years) <- years
+
+college_by_year <- map_dfr(years, ~{
+  get_acs(
+    geography = "county",
+    state = "CA",
+    variables = college_vars,
+    summary_var = "B15002_001",
+    survey = "acs1",
+    year = .x
+  )
+}, .id = "year")
+```
+
+**Exercise**. Display the documentation for the function `map_dfr()`. Explain what does the argument `.id` do?
+```{r ex-map-dfr-doc, exercise = TRUE}
+
+```
+
+```{r ex-map-dfr-doc-solution}
+?map_dfr
+```
+
+Let's review the results.
+```{r}
+college_by_year %>% 
+  arrange(NAME, variable, year)
+```
+The result is a long-form dataset that contains a time series of each requested ACS variable for each county in California that is available in the 1-year ACS. The code below outlines a `group_by() %>% summarize()` workflow for calculating the percentage of the population age 25 and up with a 4-year college degree, then uses the `pivot_wider()` function from the **tidyr** package to spread the years across the columns for tabular data display.
+```{r}
+percent_college_by_year <- college_by_year %>%
+  group_by(NAME, year) %>%
+  summarize(numerator = sum(estimate),
+            denominator = first(summary_est)) %>%
+  mutate(pct_college = 100 * (numerator / denominator)) %>%
+  pivot_wider(id_cols = NAME,
+              names_from = year,
+              values_from = pct_college) %>%
+  print()
+```
+
+## Handling margin of error (MOE) in ACS
+
+Median household income by county in California using the default `moe_level` of 90:
+```{r}
+get_acs(
+  geography = "county",
+  state = "CA",
+  variables = "B19013_001",
+  year = 2020
+)
+```
+
+**Exercise**. What's the interpretation of the MOE? A stricter MOE level (`moe_level = 99`) will produce a larger or smaller MOE? Test your hypothesis using following code.
+```{r ex-moe-level, exercise = TRUE}
+get_acs(
+  geography = "county",
+  state = "CA",
+  variables = "B19013_001",
+  year = 2020,
+  moe_level = 90
+)
+```
+
+```{r ex-moe-level-solution}
+# larger MOE level yields a larger MOE
+get_acs(
+  geography = "county",
+  state = "CA",
+  variables = "B19013_001",
+  year = 2020,
+  moe_level = 99
+)
+```
+
+Age groups by sex for the population age 65 and older for Census tracts in Los Angeles County.
+```{r}
+vars <- str_c("B01001_0", c(20:25, 44:49)) # Males + Females
+
+lac <- get_acs(
+  geography = "tract",
+  variables = vars,
+  county = "Los Angeles",
+  state = "CA",  
+  year = 2020
+) %>%
+  print(width = Inf, n = 20)
+```
+
+```{r}
+# Bel Air census tract
+example_tract <- lac %>%
+  filter(GEOID == "06037262100") %>%
+  select(-NAME) %>%
+  print()
+```
+
+Group by sex and calibrate the MOE by `moe_sum()`:
+```{r}
+example_tract %>%
+  mutate(sex = case_when(
+    str_sub(variable, start = -2) < "26" ~ "Male",
+    TRUE ~ "Female"
+  )) %>%
+  group_by(GEOID, sex) %>%
+  summarize(sum_est = sum(estimate), 
+            sum_moe = moe_sum(moe, estimate))
+```
+
+```{r, include = FALSE}
+load_variables(2020, dataset = "acs5") %>%
+  filter(str_detect(name, "B01001_0")) %>%
+  print(n = Inf)
+```
+
+Other MOE calibration functions include `moe_sum()`, `moe_product()`, `moe_ratio()`, and `moe_prop()`. The “best bet” is to first search the ACS tables to see if your data are found in aggregated form elsewhere before doing the aggregation and MOE estimation yourself. In many cases, you’ll find aggregated information in the ACS combined tables, Data Profile, or Subject Tables that will include pre-computed margins of error for you.
