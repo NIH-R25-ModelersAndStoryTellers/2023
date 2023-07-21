@@ -1,5 +1,5 @@
 ---
-title: "Communities in LA County: What Do We Know?"
+title: "Visualizing Census data"
 subtitle: R25 Modelers and Story Tellers
 author: "Drs. Hua Zhou and Roch Nianogo"
 date: "`r format(Sys.time(), '%d %B, %Y')`"
