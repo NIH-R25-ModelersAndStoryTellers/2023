@@ -1,0 +1,494 @@
+---
+title: "Some spatial analysis"
+subtitle: R25 Modelers and Story Tellers
+author: "Drs. Hua Zhou and Roch Nianogo"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+format:
+  html:
+    theme: cosmo
+    embed-resources: true
+    number-sections: true
+    toc: true
+    toc-depth: 4
+    toc-location: left
+    code-fold: false
+knitr:
+  opts_chunk: 
+    fig.align: 'center'
+    fig.width: 6
+    fig.height: 4
+    message: FALSE
+    cache: false
+---
+
+```{r setup, include=FALSE}
+# library(learnr)
+library(tidyverse)
+library(tidycensus)
+census_api_key("e0ab5f4384b9bfa172dc4ed2991fe5fda8207b6d", install = TRUE, overwrite = TRUE)
+readRenviron("~/.Renviron")
+library(tigris)
+options(tigris_use_cache = TRUE)
+library(mapview)
+library(mapboxapi)
+mb_access_token("sk.eyJ1IjoiaHVhemhvdSIsImEiOiJjbGsyNnlybnowYnU4M2tvMDhsNTU1N2h4In0.ct-m10pA3B7Eais2W7KavA", install = TRUE, overwrite = TRUE)
+readRenviron("~/.Renviron")
+library(sf)
+library(tmap)
+library(crsuggest)
+
+# knitr::opts_chunk$set(error = TRUE)
+```
+
+## Introduction
+
+In this tutorial, we learn:
+
+* some spatial analyses.
+
+Resources: [Analyzing US Census Data](https://walker-data.com/census-r/the-united-states-census-and-the-r-programming-language.html) Chapter 7 and [_R for Data Science_](http://r4ds.had.co.nz/).
+
+## Spatial predicates
+
+How do we find Census tracts that intersect with the Los Angeles metro area? 
+
+- Find all Census tracts in CA.
+```{r}
+library(tigris)
+library(tidyverse)
+library(sf)
+options(tigris_use_cache = TRUE)
+
+# CRS used: NAD27 / California zone VII
+ca_tracts <- tracts(state = "CA", cb = TRUE) %>%
+  st_transform(4267) %>%
+  print()
+```
+ 
+- Find Los Angeles CBSA.
+```{r}
+la_metro <- core_based_statistical_areas(cb = TRUE, year = 2020) %>%
+  filter(str_detect(NAME, "Los Angeles")) %>%
+  st_transform(4267) %>%
+  print()
+```
+    
+- Plot:
+```{r}
+ggplot() +
+  geom_sf(data = ca_tracts, fill = "white", color = "grey") +
+  geom_sf(data = la_metro, fill = NA, color = "red") +
+  theme_void() +
+  labs(title = "Census tracts relative to LA CBSA")
+```
+
+- Spatial subsets that intersect:
+```{r}
+ca_tracts_intersect <- ca_tracts %>%
+  st_filter(la_metro, .predicate = st_intersects)
+
+ggplot() + 
+  geom_sf(data = ca_tracts_intersect, fill = "white", color = "grey") + 
+  geom_sf(data = la_metro, fill = NA, color = "red") + 
+  theme_void() + 
+  labs(title = "Census tracts that intersect or border with the Los Angeles CBSA")
+```
+
+- Predicate `st_within`:
+```{r}
+ca_tracts_within <- ca_tracts %>%
+  st_filter(la_metro, .predicate = st_within)
+
+ggplot() + 
+  geom_sf(data = ca_tracts_within, fill = "white", color = "grey") + 
+  geom_sf(data = la_metro, fill = NA, color = "red") + 
+  theme_void() + 
+  labs(title = "Census tracts within the Los Angeles CBSA")
+```
+
+### Spatial joins and group-wise spatial analysis
+
+- 
+```{r}
+library(tidycensus)
+library(tidyverse)
+library(sf)
+
+# CRS: NAD83(2011) / Texas Centric Albers Equal Area
+tx_cbsa <- get_acs(
+  geography = "cbsa",
+  variables = "B01003_001", # total population
+  year = 2019,
+  survey = "acs1",
+  geometry = TRUE
+) %>%
+  filter(str_detect(NAME, "TX")) %>%
+  slice_max(estimate, n = 4) %>%
+  st_transform(6579)
+
+tx_cbsa
+```
+
+```{r}
+pct_hispanic <- get_acs(
+  geography = "tract",
+  variables = "DP05_0071P", # percent Hispanic
+  state = "TX",
+  year = 2019,
+  geometry = TRUE
+) %>%
+  st_transform(6579)
+
+pct_hispanic
+```
+
+Spatial join:
+```{r}
+hispanic_by_metro <- st_join(
+  pct_hispanic,
+  tx_cbsa,
+  join = st_within,
+  suffix = c("_tracts", "_metro"),
+  left = FALSE # inner-join
+) 
+
+hispanic_by_metro
+```
+
+```{r}
+hispanic_by_metro %>%
+  mutate(NAME_metro = str_replace(NAME_metro, ", TX Metro Area", "")) %>%
+  ggplot() + 
+  geom_density(aes(x = estimate_tracts), color = "navy", fill = "navy", 
+               alpha = 0.4) + 
+  theme_minimal() + 
+  facet_wrap(~NAME_metro) + 
+  labs(title = "Distribution of Hispanic/Latino population by Census tract",
+       subtitle = "Largest metropolitan areas in Texas",
+       y = "Kernel density estimate",
+       x = "Percent Hispanic/Latino in Census tract")
+
+hispanic_by_metro
+```
+
+```{r}
+median_by_metro <- hispanic_by_metro %>%
+  group_by(NAME_metro) %>%
+  summarize(median_hispanic = median(estimate_tracts, na.rm = TRUE))
+
+median_by_metro
+```
+
+## Distance and proximity analysis
+
+### Distance
+
+All Level I trauma centers in LA metro area:
+```{r}
+library(tigris)
+library(sf)
+library(tidyverse)
+options(tigris_use_cache = TRUE)
+
+# CRS: NAD83 / Iowa North
+oc_subdivs <- county_subdivisions(
+  state = "CA", 
+  county = c("Orange"),
+  cb = TRUE, 
+  year = 2019
+  ) %>%
+  st_transform(4267)
+
+hospital_url <- "https://services1.arcgis.com/Hp6G80Pky0om7QvQ/arcgis/rest/services/Hospital/FeatureServer/0/query?outFields=*&where=1%3D1&f=geojson"
+
+trauma <- st_read(hospital_url) %>%
+  filter(str_detect(TRAUMA, "LEVEL I")) %>%
+  st_transform(4267) %>%
+  distinct(ID, .keep_all = TRUE)
+
+oc_trauma <- trauma %>%
+  st_filter(
+    oc_subdivs, 
+    .predicate = st_is_within_distance,
+    dist = 10000 # 100KM
+    ) %>%
+  print()
+```
+
+```{r}
+ggplot() + 
+  geom_sf(data = oc_subdivs, color = "NA", fill = "grey50") + 
+  geom_sf(data = oc_trauma, color = "red") + 
+  theme_void()
+```
+
+Calculate distances:
+```{r}
+dist <- oc_subdivs %>%
+  st_centroid() %>%
+  st_distance(oc_trauma) 
+
+dist[1:5, 1:5]
+```
+
+Histogram of distances to the nearest hospital:
+```{r}
+min_dist <- dist %>%
+  apply(1, min) %>%
+  as.vector() %>%
+  magrittr::divide_by(1000)
+
+hist(min_dist)
+```
+
+### Travel time
+
+```{r}
+library(mapboxapi)
+
+# subset_tracts <- slice_sample(lametro_tracts, n = 15)
+
+times <- mb_matrix(
+  origins = oc_subdivs, 
+  destinations = oc_trauma,
+  profile = "driving"
+  )
+
+times
+```
+
+```{r}
+min_time <- apply(times, 1, min)
+
+oc_subdivs$time <- min_time
+
+ggplot(oc_subdivs, aes(fill = time)) + 
+  geom_sf(color = NA) + 
+  scale_fill_viridis_c(option = "magma") + 
+  theme_void() + 
+  labs(fill = "Time (minutes)",
+       title = "Travel time to nearest Level I trauma hospital",
+       subtitle = "Census tracts in Orange County, CA",
+       caption = "Data sources: US Census Bureau, US DHS, Mapbox")
+```
+
+### Catchment areas: buffers and isochrones
+
+```{r}
+ucla_hosp <- filter(trauma, ID == "0038190095")
+
+# 5 km buffer
+buf5km <- st_buffer(ucla_hosp, dist = 5000) 
+
+# 10 min isochrone given current traffic
+iso10min <- mb_isochrone(
+  ucla_hosp, 
+  time = 10, 
+  profile = "driving-traffic",
+  # depart_at = "2023-07-05T17:00"
+  )
+```
+
+Mapping:
+```{r}
+library(leaflet)
+library(leafsync)
+
+hospital_icon <- makeAwesomeIcon(icon = "ios-medical", 
+                                 markerColor = "red",
+                                 library = "ion")
+
+# The Leaflet package requires data be in CRS 4326
+map1 <- leaflet() %>% 
+  addTiles() %>%
+  addPolygons(data = st_transform(buf5km, 4326)) %>% 
+  addAwesomeMarkers(data = st_transform(ucla_hosp, 4326),
+                    icon = hospital_icon)
+
+map2 <- leaflet() %>% 
+  addTiles() %>%
+  addPolygons(data = iso10min) %>% 
+  addAwesomeMarkers(data = st_transform(ucla_hosp, 4326),
+                    icon = hospital_icon)
+
+sync(map1, map2)
+```
+
+## Spatial neighborhoods and spatial weights matrices
+
+```{r}
+library(tidycensus)
+library(tidyverse)
+library(tigris)
+library(sf)
+library(spdep)
+options(tigris_use_cache = TRUE)
+
+# CRS: 4267
+la_cbsa <- core_based_statistical_areas(cb = TRUE, year = 2020) %>%
+  filter(str_detect(NAME, "Los Angeles")) %>%
+  st_transform(4267)
+
+la_tracts <- get_acs(
+  geography = "tract",
+  variables = "B01002_001",
+  state = "CA",
+  year = 2020,
+  geometry = TRUE
+) %>%
+  st_transform(4267) %>%
+  st_filter(la_cbsa, .predicate = st_within) %>%
+  na.omit()
+
+ggplot(la_tracts) + 
+  geom_sf(aes(fill = estimate), color = NA) + 
+  scale_fill_viridis_c() + 
+  theme_void()
+```
+
+### Spatial neighborhoods
+
+```{r}
+neighbors <- poly2nb(la_tracts, queen = TRUE)
+
+summary(neighbors)
+```
+
+```{r}
+la_coords <- la_tracts %>%
+  st_centroid() %>%
+  st_coordinates()
+
+plot(la_tracts$geometry)
+plot(neighbors, 
+     coords = la_coords, 
+     add = TRUE, 
+     col = "blue", 
+     points = FALSE)
+```
+
+Spatial weight matrix:
+```{r}
+weights <- nb2listw(neighbors, style = "W")
+
+weights$weights[[1]]
+```
+
+## Global and local spatial autocorrelation
+
+First law of geography
+> Everything is related to everything else, but near things are more related than distant things.
+
+```{r}
+la_tracts$lag_estimate <- lag.listw(weights, la_tracts$estimate)
+la_tracts
+```
+
+```{r}
+ggplot(la_tracts, aes(x = estimate, y = lag_estimate)) + 
+  geom_point(alpha = 0.3) + 
+  geom_abline(color = "red") + 
+  theme_minimal() + 
+  labs(title = "Median age by Census tract, Los Angeles CA",
+       x = "Median age",
+       y = "Spatial lag, median age", 
+       caption = "Data source: 2016-2020 ACS.\nSpatial relationships based on queens-case polygon contiguity.")
+```
+
+Moran's I test:
+```{r}
+moran.test(la_tracts$estimate, weights)
+```
+
+### Local spatial autocorrelation
+
+```{r}
+# For Gi*, re-compute the weights with `include.self()`
+localg_weights <- nb2listw(include.self(neighbors))
+
+la_tracts$localG <- localG(la_tracts$estimate, localg_weights)
+
+ggplot(la_tracts) + 
+  geom_sf(aes(fill = localG), color = NA) + 
+  scale_fill_distiller(palette = "RdYlBu") + 
+  theme_void() + 
+  labs(fill = "Local Gi* statistic")
+```
+
+```{r}
+la_tracts <- la_tracts %>%
+  mutate(hotspot = case_when(
+    localG >= 2.576 ~ "High cluster",
+    localG <= -2.576 ~ "Low cluster",
+    TRUE ~ "Not significant"
+  ))
+
+ggplot(la_tracts) + 
+  geom_sf(aes(fill = hotspot), color = "grey90", size = 0.1) + 
+  scale_fill_manual(values = c("red", "blue", "grey")) + 
+  theme_void()
+```
+
+### Identifying clusters and spatial outliers with local indicators of spatial association (LISA)
+
+```{r}
+set.seed(1983)
+
+la_tracts$scaled_estimate <- as.numeric(scale(la_tracts$estimate))
+
+la_lisa <- localmoran_perm(
+  la_tracts$scaled_estimate, 
+  weights, 
+  nsim = 999L, 
+  alternative = "two.sided"
+) %>%
+  as_tibble() %>%
+  set_names(c("local_i", "exp_i", "var_i", "z_i", "p_i",
+              "p_i_sim", "pi_sim_folded", "skewness", "kurtosis"))
+
+la_lisa_df <- la_tracts %>%
+  select(GEOID, scaled_estimate) %>%
+  mutate(lagged_estimate = lag.listw(weights, scaled_estimate)) %>%
+  bind_cols(la_lisa)
+```
+
+Cluster:
+```{r}
+la_lisa_clusters <- la_lisa_df %>%
+  mutate(lisa_cluster = case_when(
+    p_i >= 0.05 ~ "Not significant",
+    scaled_estimate > 0 & local_i > 0 ~ "High-high",
+    scaled_estimate > 0 & local_i < 0 ~ "High-low",
+    scaled_estimate < 0 & local_i > 0 ~ "Low-low",
+    scaled_estimate < 0 & local_i < 0 ~ "Low-high"
+  ))
+```
+
+LISA quadrant plot:
+```{r}
+color_values <- c(`High-high` = "red", 
+                  `High-low` = "pink", 
+                  `Low-low` = "blue", 
+                  `Low-high` = "lightblue", 
+                  `Not significant` = "white")
+
+ggplot(la_lisa_clusters, aes(x = scaled_estimate, 
+                              y = lagged_estimate,
+                              fill = lisa_cluster)) + 
+  geom_point(color = "black", shape = 21, size = 2) + 
+  theme_minimal() + 
+  geom_hline(yintercept = 0, linetype = "dashed") + 
+  geom_vline(xintercept = 0, linetype = "dashed") + 
+  scale_fill_manual(values = color_values) + 
+  labs(x = "Median age (z-score)",
+       y = "Spatial lag of median age (z-score)",
+       fill = "Cluster type")
+```
+
+```{r}
+ggplot(la_lisa_clusters, aes(fill = lisa_cluster)) + 
+  geom_sf(size = 0.1) + 
+  theme_void() + 
+  scale_fill_manual(values = color_values) + 
+  labs(fill = "Cluster type")
+```
