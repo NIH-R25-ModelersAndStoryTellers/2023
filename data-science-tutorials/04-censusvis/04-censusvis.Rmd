@@ -16,6 +16,7 @@ library(learnr)
 library(tidyverse)
 library(tidycensus)
 census_api_key("e0ab5f4384b9bfa172dc4ed2991fe5fda8207b6d", install = TRUE, overwrite = TRUE)
+readRenviron("~/.Renviron")
 library(tigris)
 options(tigris_use_cache = TRUE)
 library(mapview)
@@ -60,14 +61,13 @@ ca_wide <- get_acs(
   geography = "county",
   state = "CA",
   variables = c(
-    medinc = "B19013_001",
-    medage = "B01002_001"
+    medinc = "B19013_001", # median household income
+    medage = "B01002_001"  # median age
     ),
   output = "wide",
   year = 2020
-)
-
-ca_wide
+) %>%
+  print()
 ```
 
 - Our first **ggplot** figure is a **histogram** of median income:
@@ -176,16 +176,15 @@ library(tidycensus)
 library(tidyverse)
 
 metros <-  get_acs(
-  geography = "cbsa",         # metropolitan statistical area/micropolitan statistical area
+  geography = "cbsa",         # metropolitan statistical area
   variables = "DP03_0021P",   # percentage of public transportation commuters
   summary_var = "B01003_001", # total population
   survey = "acs1",
   year = 2019
 ) %>%
   # 10 most populous CBSAs
-  slice_max(summary_est, n = 20)
-
-metros
+  slice_max(summary_est, n = 20) %>%
+  print()
 ```
 
 - Bar chart:
@@ -265,7 +264,8 @@ ggplot(ca_income, aes(x = estimate, y = reorder(NAME, estimate))) +
        x = "", 
        y = "ACS estimate") + 
   theme_minimal(base_size = 9) + 
-  scale_x_continuous(labels = label_dollar())
+  scale_x_continuous(labels = label_dollar()) + 
+  scale_y_discrete(guide = guide_axis(n.dodge = 2))
 ```
 
 - Add error bar (from margin of errors):
@@ -278,7 +278,8 @@ ggplot(ca_income, aes(x = estimate, y = reorder(NAME, estimate))) +
        subtitle = "Counties in California", 
        x = "2016-2020 ACS estimate", 
        y = "") + 
-  scale_x_continuous(labels = label_dollar())
+  scale_x_continuous(labels = label_dollar()) + 
+  scale_y_discrete(guide = guide_axis(n.dodge = 2))
 ```
 
 What do we observe?
@@ -296,7 +297,7 @@ names(years) <- years
 deschutes_value <- map_dfr(years, ~{
   get_acs(
     geography = "county",
-    variables = "B25077_001",
+    variables = "B25077_001", # median home value
     state = "OR",
     county = "Deschutes",
     year = .x,
@@ -310,10 +311,10 @@ deschutes_value <- map_dfr(years, ~{
 ```{r}
 ggplot(deschutes_value, aes(x = year, y = estimate, group = 1)) + 
   geom_ribbon(
-    aes(ymax = estimate + moe, ymin = estimate - moe), 
+    aes(ymax = estimate + moe, ymin = estimate - moe),
     fill = "navy",
     alpha = 0.4
-    ) + 
+    ) +
   geom_line(color = "navy") + 
   geom_point(color = "navy", size = 2) + 
   theme_minimal(base_size = 12) + 
@@ -337,7 +338,7 @@ ca <- get_estimates(
   breakdown = c("SEX", "AGEGROUP"),
   breakdown_labels = TRUE,
   year = 2019
-) %>%
+  ) %>%
   print()
 ```
 
@@ -398,8 +399,11 @@ us_pyramid_data <- get_estimates(
   group_by(NAME) %>%
   mutate(prop = value / sum(value, na.rm = TRUE)) %>%
   ungroup() %>%
-  mutate(prop = ifelse(SEX == "Male", -prop, prop))
+  mutate(prop = ifelse(SEX == "Male", -prop, prop)) %>%
+  print()
+```
 
+```{r}
 ggplot(us_pyramid_data, aes(x = prop, y = AGEGROUP, fill = SEX)) + 
   geom_col(width = 1) + 
   theme_minimal() + 
