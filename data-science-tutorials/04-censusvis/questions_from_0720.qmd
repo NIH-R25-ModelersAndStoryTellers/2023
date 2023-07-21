@@ -1,0 +1,111 @@
+---
+title: "Questions from July 20, 2023"
+subtitle: "R25 Modelers and Story Tellers"
+author: "Drs. Hua Zhou and Roch Nianogo"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+format:
+  html:
+    theme: cosmo
+    embed-resources: true
+    number-sections: true
+    toc: true
+    toc-depth: 4
+    toc-location: left
+    code-fold: false
+knitr:
+  opts_chunk: 
+    fig.align: 'center'
+    fig.width: 6
+    fig.height: 4
+    message: FALSE
+    cache: false
+---
+
+```{r setup, include = FALSE}
+# library(learnr)
+library(tidyverse)
+library(tidycensus)
+census_api_key("e0ab5f4384b9bfa172dc4ed2991fe5fda8207b6d", install = TRUE, overwrite = TRUE)
+readRenviron("~/.Renviron")
+library(tigris)
+options(tigris_use_cache = TRUE)
+library(mapview)
+library(mapboxapi)
+mb_access_token("pk.eyJ1IjoiaHVhemhvdSIsImEiOiJjbGptZDYyc3AwemYxM2VscHkzdzlmOXdiIn0.BSJD9Eaca8Jg4fpTS0W1lw", install = TRUE, overwrite = TRUE)
+readRenviron("~/.Renviron")
+library(sf)
+library(tmap)
+library(scales)
+library(plotly)
+
+knitr::opts_chunk$set(error = TRUE)
+```
+
+## Summer's question
+
+How to filter rows in a range of a variable's rankings?
+
+Median age from the 2016-2020 ACS for all counties in the United States:
+```{r}
+median_age <- get_acs(
+  geography = "county",
+  variables = c(medage = "B01002_001"), # median age
+  year = 2020
+) %>%
+  print()
+```
+
+Retrieve rows with `estimate` value ranking between 10 and 20.
+```{r}
+median_age %>%
+  filter(rank(estimate) >= 10, rank(estimate) <= 20) %>%
+  print()
+```
+
+## Jovita's question
+
+How to merge individual level data with Census data?
+
+For demonstration, suppose we have a tibble of 5 individuals:
+```{r}
+mydata <- tibble(
+  id = seq(1:5),
+  sex = c("Female", "Female", "Male", "Female", "Male"),
+  age = runif(n = 5, min = 20, max = 80),
+  zipcode = c("90036", "90046", "90029", "90021", "90047")
+) %>%
+  print()
+```
+
+We pull some demographic information from 2015-2019 ACS.
+```{r}
+acs_data <- get_acs(
+  geography = "zcta",
+  variables = c(
+  median_income = "DP03_0062",
+  median_age = "B01002_001",
+  pct_college = "DP02_0068P"
+  ),
+  state = "CA",
+  geometry = TRUE,
+  year = 2019,
+  output = "wide"
+  ) %>%
+  print()
+```
+
+Merge demographic information into individual data set by matching the zip codes:
+```{r}
+mergeddata <- mydata %>%
+  left_join(acs_data, by = join_by(zipcode == GEOID)) %>%
+  print()
+```
+
+Where are these individuals?
+```{r}
+mergeddata %>%
+  st_as_sf() %>%
+  mapview()
+```
+
+More variants of join: <https://ucla-biostat-203b.github.io/2023winter/slides/07-dplyr/dplyr.html#combine-variables-columns>
