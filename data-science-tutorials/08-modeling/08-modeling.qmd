@@ -134,10 +134,12 @@ ca_urban_data %>%
 ### Multi-group segregation indices
 
 For a data set $T$, 
-- Mutual information index
+
+- Mutual information index is
 $$
 M(T) = \sum_{u=1}^U \sum_{g=1}^G p_{ug} \log \frac{p_{ug}}{p_u p_g}.
 $$
+
 - Theil's $H$ is
 $$
 H(T) = \frac{M(T)}{E(T)},
@@ -154,6 +156,7 @@ mutual_within(
   wide = TRUE
 )
 ```
+
 ### Local segregation analysis
 
 Patterns of segregation across the most segregated urban area, Los Angeles:
@@ -534,7 +537,7 @@ ggplot(gw_model_results, aes(fill = pop_density)) +
   labs(fill = "Local β for \npopulation density")
 ```
 
-## Geodemographic classification
+## Geodemographic clustering
 
 ### Aspatial K-means
 
