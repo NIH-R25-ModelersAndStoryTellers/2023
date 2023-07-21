@@ -137,6 +137,6 @@ get_acs(
 
 - Today's schedule:  <https://bruinlearn.ucla.edu/courses/173989/pages/friday-7-slash-21>
 
-- Feedback: go slower, longer breaks.
-
 - `git clone` to sync with the new course materials. 
+
+- Feedback: shiny app crashes, go slower, longer breaks.
