@@ -1,0 +1,617 @@
+---
+title: "Modeling US Census data"
+output:
+  learnr::tutorial:
+    progressive: true
+    allow_skip: true
+    toc-depth: 4
+runtime: shiny_prerendered
+description: >
+  Chapter 8 of the book [Analyzing US Census Data](https://walker-data.com/census-r/the-united-states-census-and-the-r-programming-language.html).
+---
+
+```{r setup, include=FALSE}
+library(learnr)
+library(tidyverse)
+library(tidycensus)
+census_api_key("e0ab5f4384b9bfa172dc4ed2991fe5fda8207b6d", install = TRUE, overwrite = TRUE)
+readRenviron("~/.Renviron")
+library(tigris)
+options(tigris_use_cache = TRUE)
+library(mapview)
+library(mapboxapi)
+mb_access_token("sk.eyJ1IjoiaHVhemhvdSIsImEiOiJjbGsyNnlybnowYnU4M2tvMDhsNTU1N2h4In0.ct-m10pA3B7Eais2W7KavA", install = TRUE, overwrite = TRUE)
+readRenviron("~/.Renviron")
+library(sf)
+library(tmap)
+library(crsuggest)
+
+tutorial_options(
+  exercise.timelimit = 60,
+  # A simple checker function that just returns the message in the check chunk
+  exercise.checker = function(check_code, ...) {
+    list(
+      message = eval(parse(text = check_code)),
+      correct = logical(0),
+      type = "info",
+      location = "append"
+    )
+  }
+)
+knitr::opts_chunk$set(error = TRUE)
+```
+
+## Introduction
+
+In this tutorial, we learn to:
+
+* perform segregation analysis
+
+* regression analysis
+
+Resources: [Analyzing US Census Data](https://walker-data.com/census-r/the-united-states-census-and-the-r-programming-language.html) Chapter 8 and [R for Data Science](http://r4ds.had.co.nz/).
+
+## Segregation and diversity
+
+```{r}
+library(tidycensus)
+library(tidyverse)
+library(segregation)
+library(tigris)
+library(sf)
+
+# Get California tract data by race/ethnicity
+ca_acs_data <- get_acs(
+  geography = "tract",
+  variables = c(
+    white = "B03002_003",
+    black = "B03002_004",
+    asian = "B03002_006",
+    hispanic = "B03002_012"
+  ), 
+  state = "CA",
+  geometry = TRUE,
+  year = 2019
+) 
+
+# Use tidycensus to get urbanized areas by population with geometry, 
+# then filter for those that have populations of 750,000 or more
+us_urban_areas <- get_acs(
+  geography = "urban area",
+  variables = "B01001_001",
+  geometry = TRUE,
+  year = 2019,
+  survey = "acs1"
+) %>%
+  filter(estimate >= 750000) %>%
+  transmute(urban_name = str_remove(NAME, 
+                                    fixed(", CA Urbanized Area (2010)")))
+
+# Compute an inner spatial join between the California tracts and the 
+# urbanized areas, returning tracts in the largest California urban 
+# areas with the urban_name column appended
+ca_urban_data <- ca_acs_data %>%
+  st_join(us_urban_areas, left = FALSE) %>% # join = st_intersects by default
+  select(-NAME) %>%
+  st_drop_geometry()
+```
+
+### White-Hispanic dissimilarity index
+
+Dissimilarity index
+$$
+D = \frac 12 \sum_{i=1}^N | \frac{a_i}{A} - \frac{b_i}{B}|,
+$$
+where $a_i$ represents the population of group $A$ in a given areal unit $i$; A is the total population of that group in the study region (e.g. a metropolitan area); and $b_i$ and $B$ are the equivalent metrics for the second group. $D=0$ indicates perfect integration and $D=1$ means complete segregation.
+
+Dissimilarity in the LA metro area:
+```{r}
+ca_urban_data %>%
+  filter(variable %in% c("white", "hispanic"),
+         urban_name == "Los Angeles--Long Beach--Anaheim") %>%
+  dissimilarity(
+    group = "variable", # race groups
+    unit = "GEOID",     # geographic regions
+    weight = "estimate"
+  )
+```
+
+Compute the dissimilarity for each urban areas in California.
+```{r}
+ca_urban_data %>%
+  filter(variable %in% c("white", "hispanic")) %>%
+  group_by(urban_name) %>%
+  group_modify(~
+    dissimilarity(.x,
+      group = "variable",
+      unit = "GEOID",
+      weight = "estimate"
+    )
+  ) %>% 
+  arrange(desc(est)) %>%
+  print()
+```
+
+### Multi-group segregation indices
+
+For a data set $T$, 
+- Mutual information index
+$$
+M(T) = \sum_{u=1}^U \sum_{g=1}^G p_{ug} \log \frac{p_{ug}}{p_u p_g}.
+$$
+- Theil's $H$ is
+$$
+H(T) = \frac{M(T)}{E(T)},
+$$
+where $E(T)$ is the entropy of $T$, normalizing $H$ to be between 0 and 1.
+
+```{r}
+mutual_within(
+  data = ca_urban_data,
+  group = "variable",
+  unit = "GEOID",
+  weight = "estimate",
+  within = "urban_name",
+  wide = TRUE
+)
+```
+### Local segregation analysis
+
+Patterns of segregation across the most segregated urban area, Los Angeles:
+```{r}
+la_local_seg <- ca_urban_data %>%
+  filter(urban_name == "Los Angeles--Long Beach--Anaheim") %>%
+  mutual_local(
+    group = "variable",
+    unit = "GEOID",
+    weight = "estimate", 
+    wide = TRUE
+  ) %>%
+  print()
+```
+
+```{r}
+la_tracts_seg <- tracts("CA", cb = TRUE, year = 2019) %>%
+  inner_join(la_local_seg, by = "GEOID") 
+
+la_tracts_seg %>%
+  ggplot(aes(fill = ls)) + 
+  geom_sf(color = NA) + 
+  coord_sf(crs = 26946) + 
+  scale_fill_viridis_c(option = "inferno") + 
+  theme_void() + 
+  labs(fill = "Local\nsegregation index")
+```
+
+## Regression modeling (Los Angeles)
+
+Median home value by Census tract in the Los Angeles metropolitan area:
+```{r}
+library(tidycensus)
+library(sf)
+
+variables_to_get <- c(
+  median_value = "B25077_001",
+  median_rooms = "B25018_001",
+  median_income = "DP03_0062",
+  total_population = "B01003_001",
+  median_age = "B01002_001",
+  pct_college = "DP02_0068P",
+  pct_foreign_born = "DP02_0094P",
+  pct_white = "DP05_0077P",
+  median_year_built = "B25037_001",
+  percent_ooh = "DP04_0046P"
+)
+
+lametro_data <- get_acs(
+  geography = "tract",
+  variables = variables_to_get,
+  state = "CA",
+  county = c("Los Angeles", "Orange"),
+  geometry = TRUE,
+  output = "wide",
+  year = 2020
+) %>%
+  select(-NAME) %>%
+  # slice(-c(572, 1939)) %>%
+  st_transform(4267) %>%
+  print(width = Inf)
+```
+
+Visualization:
+```{r}
+library(tidyverse)
+library(patchwork)
+
+mhv_map <- ggplot(lametro_data, aes(fill = median_valueE)) + 
+  geom_sf(color = NA) + 
+  scale_fill_viridis_c(labels = scales::label_dollar()) + 
+  theme_void() + 
+  labs(fill = "Median home value ")
+
+mhv_histogram <- ggplot(lametro_data, aes(x = median_valueE)) + 
+  geom_histogram(alpha = 0.5, fill = "navy", color = "navy",
+                 bins = 100) + 
+  theme_minimal() + 
+  scale_x_continuous(labels = scales::label_number_si(accuracy = 0.1)) + 
+  labs(x = "Median home value")
+
+mhv_map + mhv_histogram
+```
+
+Log-transform:
+```{r}
+library(tidyverse)
+library(patchwork)
+
+mhv_map_log <- ggplot(lametro_data, aes(fill = log(median_valueE))) + 
+  geom_sf(color = NA) + 
+  scale_fill_viridis_c() + 
+  theme_void() + 
+  labs(fill = "Median home\nvalue (log)")
+
+mhv_histogram_log <- ggplot(lametro_data, aes(x = log(median_valueE))) + 
+  geom_histogram(alpha = 0.5, fill = "navy", color = "navy",
+                 bins = 100) + 
+  theme_minimal() + 
+  scale_x_continuous() + 
+  labs(x = "Median home value (log)")
+
+mhv_map_log + mhv_histogram_log
+```
+
+Feature engineering:
+```{r}
+library(sf)
+library(units)
+
+lametro_data_for_model <- lametro_data %>%
+  mutate(pop_density = as.numeric(set_units(total_populationE / st_area(.), "1/km2")),
+         median_structure_age = 2018 - median_year_builtE) %>%
+  select(!ends_with("M")) %>% 
+  rename_with(.fn = ~str_remove(.x, "E$")) %>%
+  drop_na() %>%
+  slice(-c(572, 1939)) %>% # Catalina Island: Avalon
+  print(width = Inf)
+```
+
+Linear regression:
+```{r}
+formula <- "log(median_value) ~ median_rooms + median_income + pct_college + pct_foreign_born + pct_white + median_age + median_structure_age + percent_ooh + pop_density + total_population"
+
+model1 <- lm(formula = formula, data = lametro_data_for_model)
+
+summary(model1)
+```
+
+Inspect collinearity:
+```{r}
+library(corrr)
+
+lametro_estimates <- lametro_data_for_model %>%
+  select(-GEOID, -median_value, -median_year_built) %>%
+  st_drop_geometry()
+
+correlations <- correlate(lametro_estimates, method = "pearson")
+
+network_plot(correlations)
+```
+
+Collinearity can be diagnosed further by calculating the **variance inflation factor (VIF)** for the model, which takes into account not just pairwise correlations but the extent to which predictors are collinear with all other predictors. A VIF value of 1 indicates no collinearity; VIF values above 5 suggest a level of collinearity that has a problematic influence on model interpretation.
+```{r}
+library(car)
+
+vif(model1)
+```
+
+Exercise: Remove `median_income`:
+```{r}
+formula2 <- "log(median_value) ~ median_rooms + pct_college + pct_foreign_born + pct_white + median_age + median_structure_age + percent_ooh + pop_density + total_population"
+
+model2 <- lm(formula = formula2, data = lametro_data_for_model)
+
+summary(model2)
+```
+
+```{r}
+vif(model2)
+```
+
+### PCA
+
+PC1 captures the gradient that represents these social differences, with which multiple demographic characteristics will be associated.
+```{r}
+pca <- prcomp(
+  formula = ~., 
+  data = lametro_estimates, 
+  scale. = TRUE, 
+  center = TRUE
+)
+
+summary(pca)
+```
+
+PC loadings:
+```{r}
+pca_tibble <- pca$rotation %>%
+  as_tibble(rownames = "predictor") %>%
+  print()
+```
+
+```{r}
+pca_tibble %>%
+  select(predictor:PC5) %>%
+  pivot_longer(PC1:PC5, names_to = "component", values_to = "value") %>%
+  ggplot(aes(x = value, y = predictor)) + 
+  geom_col(fill = "darkgreen", color = "darkgreen", alpha = 0.5) + 
+  facet_wrap(~component, nrow = 1) + 
+  labs(y = NULL, x = "Value") + 
+  theme_minimal()
+```
+
+```{r}
+components <- predict(pca, lametro_estimates)
+
+lametro_pca <- lametro_data_for_model %>%
+  select(GEOID, median_value) %>%
+  cbind(components) 
+
+ggplot(lametro_pca, aes(fill = PC1)) +
+  geom_sf(color = NA) +
+  theme_void() +
+  scale_fill_viridis_c()
+```
+The map, along with the bar chart, helps us understand how the multiple variables represent latent social processes at play in Los Angeles metro area. The brighter yellow areas, which have higher values for PC1, are located in communities like Beverley, Malibu, Rancho Palos Verdes. These communities are segregated, predominantly non-Hispanic white, and are among the wealthiest neighborhoods in the entire United States. 
+
+PC regression:
+```{r}
+pca_formula <- paste0("log(median_value) ~ ", 
+                      paste0('PC', 1:6, collapse = ' + '))
+
+pca_model <- lm(formula = pca_formula, data = lametro_pca)
+
+summary(pca_model)
+```
+
+## Spatial regression
+
+### Test spatial correlation
+
+```{r}
+lametro_data_for_model$residuals <- residuals(model2)
+
+ggplot(lametro_data_for_model, aes(x = residuals)) + 
+  geom_histogram(bins = 100, alpha = 0.5, color = "navy",
+                 fill = "navy") + 
+  theme_minimal()
+```
+
+Moran's I test for spatial correlation:
+```{r}
+library(spdep)
+
+wts <- lametro_data_for_model %>%
+  poly2nb() %>%
+  nb2listw()
+
+moran.test(lametro_data_for_model$residuals, wts)
+```
+
+```{r}
+lametro_data_for_model$lagged_residuals <- lag.listw(wts, lametro_data_for_model$residuals)
+
+ggplot(lametro_data_for_model, aes(x = residuals, y = lagged_residuals)) + 
+  theme_minimal() + 
+  geom_point(alpha = 0.5) + 
+  geom_smooth(method = "lm", color = "red")
+```
+
+### Spatial lag model
+
+Spatial lag model:
+$$
+Y_i = \alpha + \rho Y_{\text{lag}-i} + \sum_k \beta_k X_{ki} + \epsilon_i,
+$$
+where $w_{ij}$ represents the spatial weights, $\rho$ measures the effect of the spatial lag in the outcome variable, and $k$ is the number of predictors in the model.
+```{r}
+library(spatialreg)
+
+lag_model <- lagsarlm(
+  formula = formula2, 
+  data = lametro_data_for_model, 
+  listw = wts
+)
+
+summary(lag_model, Nagelkerke = TRUE)
+```
+
+### Spatial error models
+
+Spatial error models:
+$$
+Y_i = \alpha + \sum_k \beta_k X_{ki} + u_i,
+$$
+where
+$$
+u_i  = \lambda u_{\text{lag}-i} + \epsilon_i
+$$
+and
+$$
+u_{\text{lag}-i} = \sum_j w_{ij} u_j.
+$$
+
+```{r}
+error_model <- errorsarlm(
+  formula = formula2, 
+  data = lametro_data_for_model, 
+  listw = wts
+)
+
+summary(error_model, Nagelkerke = TRUE)
+```
+
+Choosing between spatial lag and spatial error models:
+```{r}
+moran.test(lag_model$residuals, wts)
+```
+
+```{r}
+moran.test(error_model$residuals, wts)
+```
+
+Lagrange multiplier tests:
+```{r}
+lm.LMtests(
+  model2, 
+  wts, 
+  test = c("LMerr", "LMlag", "RLMerr", "RLMlag")
+)
+```
+
+## Geographically weighted regression
+
+Choose the number of nearest neighbors by CV:
+```{r}
+library(GWmodel)
+library(sf)
+
+lametro_data_sp <- lametro_data_for_model %>%
+  as_Spatial()
+
+bw <- bw.gwr(
+  formula = formula2, 
+  data = lametro_data_sp, 
+  kernel = "bisquare",
+  adaptive = TRUE
+)
+```
+
+Fitting and evaluating the GWR model
+```{r}
+formula2 <- "log(median_value) ~ median_rooms + pct_college + pct_foreign_born + pct_white + median_age + median_structure_age + percent_ooh + pop_density + total_population"
+
+gw_model <- gwr.basic(
+  formula = formula2, 
+  data = lametro_data_sp, 
+  bw = bw,
+  kernel = "bisquare",
+  adaptive = TRUE
+)
+```
+
+```{r}
+names(gw_model)
+```
+
+```{r}
+gw_model_results <- gw_model$SDF %>%
+  st_as_sf() 
+
+names(gw_model_results)
+```
+
+```{r}
+ggplot(gw_model_results, aes(fill = Local_R2)) + 
+  geom_sf(color = NA) + 
+  scale_fill_viridis_c() + 
+  theme_void()
+```
+
+Percentage owner-occupied housing:
+```{r}
+ggplot(gw_model_results, aes(fill = percent_ooh)) + 
+  geom_sf(color = NA) + 
+  scale_fill_viridis_c() + 
+  theme_void() + 
+  labs(fill = "Local β for \npercent_ooh")
+```
+
+Population density:
+```{r}
+ggplot(gw_model_results, aes(fill = pop_density)) + 
+  geom_sf(color = NA) + 
+  scale_fill_viridis_c() + 
+  theme_void() + 
+  labs(fill = "Local β for \npopulation density")
+```
+
+## Geodemographic classification
+
+### Aspatial K-means
+
+```{r}
+set.seed(1983)
+
+lametro_kmeans <- lametro_pca %>%
+  st_drop_geometry() %>%
+  select(PC1:PC8) %>%
+  kmeans(centers = 6)
+
+table(lametro_kmeans$cluster)
+```
+
+```{r}
+lametro_clusters <- lametro_pca %>%
+  mutate(cluster = as.character(lametro_kmeans$cluster))
+
+ggplot(lametro_clusters, aes(fill = cluster)) + 
+  geom_sf(size = 0.1) + 
+  scale_fill_brewer(palette = "Set1") + 
+  theme_void() + 
+  labs(fill = "Cluster ")
+```
+
+PCA plot. PC1, which is a gradient from affluent/older/white to lower-income/younger/nonwhite, and PC2, which represents areas with high population densities and educational attainment on the low end to lower-density, less educated areas on the high end. 
+```{r}
+library(plotly)
+
+cluster_plot <- ggplot(lametro_clusters, 
+                       aes(x = PC1, y = PC2, color = cluster)) + 
+  geom_point() + 
+  scale_color_brewer(palette = "Set1") + 
+  theme_minimal()
+
+ggplotly(cluster_plot) %>%
+  layout(legend = list(orientation = "h", y = -0.15, 
+                       x = 0.2, title = "Cluster"))
+```
+
+### SKATER
+
+In other applications, an analyst may want to generate meaningful clusters that are constrained to be neighboring or contiguous areas. An application of this workflow might be sales territory generation, where sales representatives will be assigned to communities in which they have local market knowledge but also want to minimize overall travel time.
+
+SKATER (Spatial ’K’luster Analysis by Tree Edge Removal) algorithm:
+```{r}
+library(spdep)
+library(bigDM)
+
+input_vars <- lametro_pca %>%
+  select(PC1:PC8) %>%
+  st_drop_geometry() %>%
+  as.data.frame() 
+
+skater_nbrs <- poly2nb(lametro_pca, queen = TRUE) # 2 disjoint connected subgraphs
+skater_nbrs_mod <- connect_subgraphs(carto = lametro_pca, ID.area = "GEOID", nb = skater_nbrs)$nb
+costs <- nbcosts(skater_nbrs_mod, input_vars)
+skater_weights <- nb2listw(skater_nbrs_mod, costs, style = "B")
+```
+
+```{r}
+mst <- mstree(skater_weights)
+
+regions <- skater(
+  mst[, 1:2],
+  input_vars, 
+  ncuts = 8,
+  crit = 10
+)
+```
+
+```{r}
+lametro_clusters$region <- as.character(regions$group)
+
+ggplot(lametro_clusters, aes(fill = region)) + 
+  geom_sf(size = 0.1) + 
+  scale_fill_brewer(palette = "Set1") + 
+  theme_void()
+```
