@@ -108,7 +108,7 @@ ggplot() +
 
 ### Spatial joins and group-wise spatial analysis
 
-- 
+- Total population sizes in the Metro Statistical Areas in Texas:
 ```{r}
 library(tidycensus)
 library(tidyverse)
@@ -129,6 +129,7 @@ tx_cbsa <- get_acs(
 tx_cbsa
 ```
 
+- Percentage of Hispanic population in Census tracts of Texas:
 ```{r}
 pct_hispanic <- get_acs(
   geography = "tract",
@@ -142,7 +143,7 @@ pct_hispanic <- get_acs(
 pct_hispanic
 ```
 
-Spatial join:
+- Spatial join:
 ```{r}
 hispanic_by_metro <- st_join(
   pct_hispanic,
@@ -155,6 +156,7 @@ hispanic_by_metro <- st_join(
 hispanic_by_metro
 ```
 
+- Visualize:
 ```{r}
 hispanic_by_metro %>%
   mutate(NAME_metro = str_replace(NAME_metro, ", TX Metro Area", "")) %>%
@@ -171,6 +173,7 @@ hispanic_by_metro %>%
 hispanic_by_metro
 ```
 
+- Summary statistics at Metro Statistical Area level:
 ```{r}
 median_by_metro <- hispanic_by_metro %>%
   group_by(NAME_metro) %>%
@@ -190,7 +193,6 @@ library(sf)
 library(tidyverse)
 options(tigris_use_cache = TRUE)
 
-# CRS: NAD83 / Iowa North
 oc_subdivs <- county_subdivisions(
   state = "CA", 
   county = c("Orange"),
