@@ -109,3 +109,34 @@ mergeddata %>%
 ```
 
 More variants of join: <https://ucla-biostat-203b.github.io/2023winter/slides/07-dplyr/dplyr.html#combine-variables-columns>
+
+## Margin of error
+
+Median household income by county in California using the default `moe_level` of 90:
+```{r}
+get_acs(
+  geography = "county",
+  state = "CA",
+  variables = "B19013_001",
+  year = 2020
+)
+```
+
+What's the interpretation of the MOE? A stricter MOE level (`moe_level = 99`) will produce a larger or smaller MOE? Test your hypothesis using following code.
+```{r ex-moe-level, exercise = TRUE}
+get_acs(
+  geography = "county",
+  state = "CA",
+  variables = "B19013_001",
+  year = 2020,
+  moe_level = 90
+)
+```
+
+## Friday 7/21 schedule
+
+- Today's schedule:  <https://bruinlearn.ucla.edu/courses/173989/pages/friday-7-slash-21>
+
+- Feedback: go slower, longer breaks.
+
+- `git clone` to sync with the new course materials. 
