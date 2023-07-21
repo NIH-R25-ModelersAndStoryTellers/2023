@@ -1,0 +1,304 @@
+---
+title: "Mapping Census geographies"
+subtitle: R25 Modelers and Story Tellers
+author: "Drs. Hua Zhou and Roch Nianogo"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+format:
+  html:
+    theme: cosmo
+    embed-resources: true
+    number-sections: true
+    toc: true
+    toc-depth: 4
+    toc-location: left
+    code-fold: false
+knitr:
+  opts_chunk: 
+    fig.align: 'center'
+    fig.width: 6
+    fig.height: 4
+    message: FALSE
+    cache: false
+---
+
+```{r setup, include=FALSE}
+# library(learnr)
+library(tidyverse)
+library(tidycensus)
+census_api_key("e0ab5f4384b9bfa172dc4ed2991fe5fda8207b6d", install = TRUE, overwrite = TRUE)
+readRenviron("~/.Renviron")
+library(tigris)
+options(tigris_use_cache = TRUE)
+library(mapview)
+library(mapboxapi)
+mb_access_token("pk.eyJ1IjoiaHVhemhvdSIsImEiOiJjbGptZDYyc3AwemYxM2VscHkzdzlmOXdiIn0.BSJD9Eaca8Jg4fpTS0W1lw", install = TRUE, overwrite = TRUE)
+readRenviron("~/.Renviron")
+library(sf)
+library(tmap)
+library(crsuggest)
+
+knitr::opts_chunk$set(eval = FALSE)
+```
+
+## Introduction
+
+![](https://d33wubrfki0l68.cloudfront.net/795c039ba2520455d833b4034befc8cf360a70ba/558a5/diagrams/data-science-explore.png)
+
+In this tutorial, we learn to:
+
+* display demographic, social-economic, public health data on maps
+
+Resources: [Analyzing US Census Data](https://walker-data.com/census-r/the-united-states-census-and-the-r-programming-language.html) Chapter 5 and [R for Data Science](http://r4ds.had.co.nz/).
+
+## Set up Census API key
+
+Please replace `KEY` by your Census API key and run the following code.
+```{r census-api-key, eval = FALSE, exercise = TRUE}
+library(tidycensus)
+census_api_key("KEY", install = TRUE, overwrite = TRUE)
+readRenviron("~/.Renviron")
+```
+
+## The trick is SIMPLE
+
+Add argument `geometry = TRUE` to the `get_decennial()`, `get_acs()`, `get_estimates()`, and `get_pums()` calls to access geography data in the [US Census Bureau's TIGRE (Topologically Integrated Geographic Encoding and Referencing)/Line database](https://www2.census.gov/geo/pdfs/maps-data/data/tiger/tgrshp2019/TGRSHP2019_TechDoc.pdf) along with other variables.
+
+Then use **ggplot**, **mapview** or other plotting packages for visualizing geographic data.
+
+## **tigris** package
+
+- TIGRE data is easily retrieved by the **tigris** package.
+
+- TIGRE data can be visualized by 
+
+    - `plot()` (base R function)
+    - `geom_sf()` in **ggplot**  
+    - `mapview()` (interactive maps)
+    
+    We mostly use `mapview()` for its speed and interactivity.    
+
+- For a complete listing of available data in tigris: <https://walker-data.com/census-r/census-geographic-data-and-applications-in-r.html#data-availability-in-tigris>
+
+### Legal entities
+
+- States in US:
+```{r}
+library(tigris)
+options(tigris_use_cache = TRUE)
+
+st <- states()
+class(st) # sf class, not a tibble
+st
+```
+
+- Plot the state geometry:
+```{r}
+# this command takes up to 1 minutes
+# plot(st$geometry)
+# ggplot(st) +
+#   geom_sf()
+mapview(st)
+```
+
+Shifted geometry:
+```{r}
+st %>%
+  shift_geometry() %>%
+  mapview()
+  # ggplot() + 
+  # geom_sf()
+```
+
+- Counties in CA:
+```{r}
+ca_counties <- counties("CA")
+
+# plot(ca_counties$geometry)
+# ggplot(ca_counties) + 
+#   geom_sf()
+mapview(ca_counties)
+```
+
+**Exercise**. Plot the counties in the state you live in (or your favorite state).
+```{r ex-plot-counties, exercise = TRUE}
+
+```
+
+### Statistical entities
+
+- Census tracts in Los Angeles County:
+```{r}
+la_tracts <- tracts("CA", "Los Angeles")
+
+# plot(la_tracts$geometry)
+# ggplot(la_tracts) + 
+#   geom_sf()
+mapview(la_tracts)
+```
+
+**Exercise**. Plot the census tracts in the county you live in (or your favorite county). If your county has water area (sea, lake, ...), try using `cb = TRUE` (cartographic boundary) again.
+```{r ex-plot-tracts, exercise = TRUE}
+
+```
+
+- Block groups in the Los Angeles County:
+```{r}
+lac_block_groups <- block_groups(state = "CA", county = "Los Angeles")
+
+# plot(ca_block_groups$geometry)
+# ggplot(ca_block_groups) + 
+#   geom_sf()
+mapview(lac_block_groups)
+```
+
+### Geographic features (roads, water)
+
+- Area water in Los Angeles County:
+```{r}
+la_water <- area_water("CA", "Los Angeles")
+
+# plot(la_water$geometry)
+# ggplot(la_water) + 
+#   geom_sf()
+mapview(la_water)
+```
+
+- Roads in CA (lines):
+```{r}
+ca_roads <- primary_secondary_roads("CA")
+
+# plot(dc_roads$geometry)
+# ggplot(ca_roads) + 
+#   geom_sf()
+mapview(ca_roads)
+```
+
+- Faceted plots:
+```{r}
+library(patchwork)
+
+la_tracts <- tracts(state = "CA", county = "Los Angeles")
+la_tracts_cb <- tracts(state = "CA", county = "Los Angeles", cb = TRUE)
+
+la_tiger_gg <- ggplot(la_tracts) + 
+  geom_sf() + 
+  theme_void() + 
+  labs(title = "TIGER/Line")
+
+la_cb_gg <- ggplot(la_tracts_cb) + 
+  geom_sf() + 
+  theme_void() + 
+  labs(title = "Cartographic boundary")
+
+la_tiger_gg + la_cb_gg
+```
+
+## Mapping Census data
+
+- Map the median age in each state from the 2019 ACS data:
+```{r}
+library(tidycensus)
+library(tidyverse)
+library(tigris)
+
+us_median_age <- get_acs(
+  geography = "state",
+  variables = "B01002_001", # median age
+  year = 2019,
+  survey = "acs1",
+  geometry = TRUE,
+  resolution = "20m"
+) %>%
+  shift_geometry() %>%
+  print()
+```
+
+```{r}
+# plot(us_median_age$geometry)
+ggplot(data = us_median_age, aes(fill = estimate)) +
+  geom_sf() + 
+  theme_void()
+```
+
+- Map the flow data. **mapdeck** package requires a [MapBox](https://www.mapbox.com/) token.
+```{r}
+library(mapboxapi)
+
+# Replace with your token below
+mb_access_token("pk.eyJ1IjoiaHVhemhvdSIsImEiOiJjbGptZDYyc3AwemYxM2VscHkzdzlmOXdiIn0.BSJD9Eaca8Jg4fpTS0W1lw", install = TRUE, overwrite = TRUE)
+readRenviron("~/.Renviron")
+```
+
+- Map the flows out of Los Angeles County.
+```{r, eval = FALSE}
+library(mapdeck)
+
+token <- "pk.eyJ1IjoiaHVhemhvdSIsImEiOiJjbGptZDYyc3AwemYxM2VscHkzdzlmOXdiIn0.BSJD9Eaca8Jg4fpTS0W1lw"
+
+lac_outflow <- get_flows(
+  geography = "county",
+  state = "CA",
+  county = "Los Angeles",
+  geometry = TRUE
+) %>%
+  filter(variable == "MOVEDOUT") %>%
+  drop_na() %>%
+  arrange(desc(estimate)) %>%
+  print()
+```
+
+```{r, eval = FALSE}
+lac_outflow %>%
+  slice_max(estimate, n = 30) %>%
+  mutate(weight = estimate / 10000) %>%
+  mapdeck(token = token) %>%
+  add_arc(origin = "centroid2",
+          destination = "centroid1",
+          stroke_width = "weight",
+          update_view = FALSE) 
+```
+
+- Linked graphs. County-level median household income (2016-2020 ACS) in the State of Vermont.
+```{r, eval = FALSE}
+library(tidycensus)
+library(ggiraph)
+library(tidyverse)
+library(patchwork)
+library(scales)
+
+vt_income <- get_acs(
+  geography = "county",
+  variables = "B19013_001", # median household income
+  state = "VT",
+  year = 2020,
+  geometry = TRUE
+) %>%
+  mutate(NAME = str_remove(NAME, " County, Vermont"))
+```
+
+```{r, eval = FALSE}
+vt_map <- ggplot(vt_income, aes(fill = estimate)) + 
+  geom_sf_interactive(aes(data_id = GEOID)) + 
+  scale_fill_distiller(palette = "Greens",
+                       direction = 1, 
+                       guide = "none") + 
+  theme_void()
+  
+vt_plot <- ggplot(vt_income, aes(x = estimate, y = reorder(NAME, estimate), 
+                                 fill = estimate)) +
+  geom_errorbar(aes(xmin = estimate - moe, xmax = estimate + moe)) +
+  geom_point_interactive(color = "black", size = 4, shape = 21,
+                         aes(data_id = GEOID)) +
+  scale_fill_distiller(palette = "Greens", direction = 1,
+                       labels = label_dollar()) + 
+  scale_x_continuous(labels = label_dollar()) + 
+  labs(title = "Household income by county in Vermont",
+       subtitle = "2016-2020 American Community Survey",
+       y = "",
+       x = "ACS estimate (bars represent margin of error)",
+       fill = "ACS estimate") + 
+  theme_minimal(base_size = 14)
+
+girafe(ggobj = vt_map + vt_plot, width_svg = 10, height_svg = 5) %>%
+  girafe_options(opts_hover(css = "fill:cyan;"))
+```
