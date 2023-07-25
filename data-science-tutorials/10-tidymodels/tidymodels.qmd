@@ -1,0 +1,144 @@
+---
+title: "Machine Learning Workflows Using tidymodels"
+subtitle: R25 Modelers and Story Tellers
+author: "Drs. Hua Zhou and Roch Nianogo"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+format:
+  html:
+    theme: cosmo
+    embed-resources: true
+    number-sections: true
+    toc: true
+    toc-depth: 4
+    toc-location: left
+    code-fold: false
+knitr:
+  opts_chunk: 
+    fig.align: 'center'
+    fig.width: 6
+    fig.height: 4
+    message: FALSE
+    cache: false
+---
+
+# Overview
+
+- A typical data science project:
+
+<p align="center">
+<img src="./data-science.png" height="200">
+</p>
+
+# Assessing model accuracy
+
+- In regression problems, we try to approximate $f$ in the model
+$$
+Y = f(X) + \epsilon.
+$$ {#eq-statistical-model}
+
+- Given training data $\{(x_1, y_1), \ldots, (x_n, y_n)\}$, we fit a model $\hat f$. We can evaluate the model accuracy on the training data by the **mean squared error**
+$$
+\operatorname{MSE}_{\text{train}} = \frac 1n \sum_{i=1}^n [y_i - \hat f(x_i)]^2. 
+$$
+The smaller $\operatorname{MSE}_{\text{train}}$, the better model fit.
+
+- However, in most situations, we are not interested in the training MSE. Rather, we are interested in the accuracy of the predictions on previously unseen test data.
+
+    - If we have a separate test set with both predictors and outcomes. Then the task is easy, we choose the learning method that yields the best test MSE
+    $$
+    \operatorname{MSE}_{\text{test}} = \frac{1}{n_{\text{test}}} \sum_{i=1}^{n_{\text{test}}} [y_i - \hat f(x_i)]^2. 
+    $$
+    
+    - In many applications, we don't have a separate test set. Is this a good idea to choose the learning method with smallest training MSE? 
+
+# Bias-variance trade-off
+
+- Let $(x_0, y_0)$ be a test observation. Under the model @eq-statistical-model, the **expected prediction error (EPE)** at $x_0$, or the **test error**, or **generalization error**, can be decomposed as
+$$
+\operatorname{E}[y_0 - \hat f(x_0)]^2 = \underbrace{\operatorname{Var}(\hat f(x_0)) + [\operatorname{Bias}(\hat f(x_0))]^2}_{\text{MSE of } \hat f(x_0) \text{ for estimating } f(x_0)} + \underbrace{\operatorname{Var}(\epsilon)}_{\text{irreducible}},
+$$
+where
+    - $\operatorname{Bias}(\hat f(x_0)) = \operatorname{E}[\hat f(x_0)] - f(x_0)$;
+    - the expectation averages over the variability in $y_0$ and $\hat f$ (function of training data).
+    
+- Typically as the flexibility of $\hat f$ increases, its variance increases and its bias decreases. 
+
+::: {#fig-tradeoff-bias-variance-tradeoff}
+
+<p align="center">
+![](bias-and-variance-tradeoff.jpg){width=75%}
+</p>
+
+Bias-variance trade-off.
+
+:::
+
+# $K$-fold cross validation
+
+- **Widely used approach** for estimating test error.
+
+- Estimates can be used to select best model, and to give an
+idea of the test error of the final chosen model.
+
+- Idea is to randomly divide the data into $K$ equal-sized parts. We leave out part $k$, fit the model to the other $K-1$ parts (combined), and then obtain predictions for the left-out $k$th part.
+
+- This is done in turn for each part $k = 1, 2, \ldots, K$, and then the results are combined.
+
+::: {#fig-10-fold-cv-auto}
+
+<p align="center">
+![](cross-validation.png){width=75%}
+</p>
+
+A schematic display of K-fold CV. A set of $n$ observations is randomly split into $K$ non-overlapping groups. Each of these $K$-ths acts as a validation set (shown in beige), and the remainder as a training set (shown in blue). The test error is estimated by averaging the $K$ resulting MSE estimates.
+
+:::
+
+- Let the $K$ parts be $C_1, C_2, \ldots, C_K$, where $C_k$ denotes the indices of the observations in part $k$. There are $n_k$ observations in part $k$. If $N$ is a multiple of $K$, then $n_k = n / K$.
+
+- Compute 
+$$
+\text{CV}_{(K)} = \sum_{k=1}^K \frac{n_k}{n} \text{MSE}_k,
+$$
+where
+$$
+\text{MSE}_k = \frac{1}{n_k} \sum_{i \in C_k} (y_i - \hat y_i)^2,
+$$
+and $\hat y_i$ is the fit for observation $i$, obtained from the data with part $k$ removed.
+
+# **tidymodels** ecosystem
+
+- [tidymodels](https://www.tidymodels.org/) is an ecosystem for:
+
+    1. Build and fit a model;
+    2. Feature engineering: coding qualitative predictors, transformation of predictors (e.g., log), extracting key features from raw variables (e.g., getting the day of the week out of a date variable), interaction terms, ...;
+    3. Evaluate model using resampling (such as cross-validation).  
+    4. Tuning model parameters.
+
+<p align="center">
+<img src="https://rviews.rstudio.com/2020/04/21/the-case-for-tidymodels/tidymodels.png" height="300">
+</p>
+
+# Heart data example
+
+We illustrate a binary classification example using a dataset from the Cleveland Clinic Foundation for Heart Disease.
+
+## Logistic regression (with enet regularization) workflow
+
+[qmd](https://raw.githubusercontent.com/NIH-R25-ModelersAndStoryTellers/2023/master/slides/10-tidymodels/workflow_logit_heart.qmd), [html](https://ucla-biostat-203b.github.io/2023winter/slides/10-tidymodels/workflow_logit_heart.html)
+
+## Random forest workflow
+
+[qmd](https://raw.githubusercontent.com/NIH-R25-ModelersAndStoryTellers/2023/master/slides/10-tidymodels/workflow_rf_heart.qmd), [html](https://ucla-biostat-203b.github.io/2023winter/slides/10-tidymodels/workflow_rf_heart.html)
+
+## Boosting (XGBoost) workflow
+
+[qmd](https://raw.githubusercontent.com/NIH-R25-ModelersAndStoryTellers/2023/master/slides/10-tidymodels/workflow_xgboost_heart.qmd), [html](https://ucla-biostat-203b.github.io/2023winter/slides/10-tidymodels/workflow_xgboost_heart.html)
+
+## SVM (with radial basis kernel) workflow
+
+[qmd](https://raw.githubusercontent.com/NIH-R25-ModelersAndStoryTellers/2023/master/slides/10-tidymodels/workflow_svmrbf_heart.qmd), [html](https://ucla-biostat-203b.github.io/2023winter/slides/10-tidymodels/workflow_svmrbf_heart.html)
+
+## Multi-layer perceptron (MLP) workflow
+
+[qmd](https://raw.githubusercontent.com/NIH-R25-ModelersAndStoryTellers/2023/master/slides/10-tidymodels/workflow_mlp_heart.qmd), [html](https://ucla-biostat-203b.github.io/2023winter/slides/10-tidymodels/workflow_mlp_heart.html)
