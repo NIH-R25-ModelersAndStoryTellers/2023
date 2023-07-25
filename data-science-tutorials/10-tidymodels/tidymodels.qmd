@@ -125,20 +125,20 @@ We illustrate a binary classification example using a dataset from the Cleveland
 
 ## Logistic regression (with enet regularization) workflow
 
-[qmd](https://raw.githubusercontent.com/NIH-R25-ModelersAndStoryTellers/2023/master/slides/10-tidymodels/workflow_logit_heart.qmd), [html](https://ucla-biostat-203b.github.io/2023winter/slides/10-tidymodels/workflow_logit_heart.html)
+[qmd](https://raw.githubusercontent.com/NIH-R25-ModelersAndStoryTellers/2023/master/slides/10-tidymodels/workflow_logit_heart.qmd), [html](https://NIH-R25-ModelersAndStoryTellers.github.io/2023/slides/10-tidymodels/workflow_logit_heart.html)
 
 ## Random forest workflow
 
-[qmd](https://raw.githubusercontent.com/NIH-R25-ModelersAndStoryTellers/2023/master/slides/10-tidymodels/workflow_rf_heart.qmd), [html](https://ucla-biostat-203b.github.io/2023winter/slides/10-tidymodels/workflow_rf_heart.html)
+[qmd](https://raw.githubusercontent.com/NIH-R25-ModelersAndStoryTellers/2023/master/slides/10-tidymodels/workflow_rf_heart.qmd), [html](https://NIH-R25-ModelersAndStoryTellers.github.io/2023/slides/10-tidymodels/workflow_rf_heart.html)
 
 ## Boosting (XGBoost) workflow
 
-[qmd](https://raw.githubusercontent.com/NIH-R25-ModelersAndStoryTellers/2023/master/slides/10-tidymodels/workflow_xgboost_heart.qmd), [html](https://ucla-biostat-203b.github.io/2023winter/slides/10-tidymodels/workflow_xgboost_heart.html)
+[qmd](https://raw.githubusercontent.com/NIH-R25-ModelersAndStoryTellers/2023/master/slides/10-tidymodels/workflow_xgboost_heart.qmd), [html](https://NIH-R25-ModelersAndStoryTellers.github.io/2023/slides/10-tidymodels/workflow_xgboost_heart.html)
 
 ## SVM (with radial basis kernel) workflow
 
-[qmd](https://raw.githubusercontent.com/NIH-R25-ModelersAndStoryTellers/2023/master/slides/10-tidymodels/workflow_svmrbf_heart.qmd), [html](https://ucla-biostat-203b.github.io/2023winter/slides/10-tidymodels/workflow_svmrbf_heart.html)
+[qmd](https://raw.githubusercontent.com/NIH-R25-ModelersAndStoryTellers/2023/master/slides/10-tidymodels/workflow_svmrbf_heart.qmd), [html](https://NIH-R25-ModelersAndStoryTellers.github.io/2023/slides/10-tidymodels/workflow_svmrbf_heart.html)
 
 ## Multi-layer perceptron (MLP) workflow
 
-[qmd](https://raw.githubusercontent.com/NIH-R25-ModelersAndStoryTellers/2023/master/slides/10-tidymodels/workflow_mlp_heart.qmd), [html](https://ucla-biostat-203b.github.io/2023winter/slides/10-tidymodels/workflow_mlp_heart.html)
+[qmd](https://raw.githubusercontent.com/NIH-R25-ModelersAndStoryTellers/2023/master/slides/10-tidymodels/workflow_mlp_heart.qmd), [html](https://NIH-R25-ModelersAndStoryTellers.github.io/2023/slides/10-tidymodels/workflow_mlp_heart.html)
