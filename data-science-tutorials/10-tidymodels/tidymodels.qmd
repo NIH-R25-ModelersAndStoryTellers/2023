@@ -119,7 +119,7 @@ and $\hat y_i$ is the fit for observation $i$, obtained from the data with part 
 <img src="https://rviews.rstudio.com/2020/04/21/the-case-for-tidymodels/tidymodels.png" height="300">
 </p>
 
-# Heart data example
+# Data example
 
 We illustrate a binary classification example using a dataset from the Cleveland Clinic Foundation for Heart Disease.
 
