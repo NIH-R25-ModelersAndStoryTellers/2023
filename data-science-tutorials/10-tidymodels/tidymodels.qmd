@@ -42,9 +42,9 @@ $$
 $$
 The smaller $\operatorname{MSE}_{\text{train}}$, the better model fit.
 
-- However, in most situations, we are not interested in the training MSE. Rather, we are interested in the accuracy of the predictions on previously unseen test data.
+- However, in most situations, we are not interested in the **training MSE**. Rather, we are interested in the accuracy of the predictions on previously unseen test data.
 
-    - If we have a separate test set with both predictors and outcomes. Then the task is easy, we choose the learning method that yields the best test MSE
+    - If we have a separate test set with both predictors and outcomes. Then the task is easy, we choose the learning method that yields the best **test MSE**
     $$
     \operatorname{MSE}_{\text{test}} = \frac{1}{n_{\text{test}}} \sum_{i=1}^{n_{\text{test}}} [y_i - \hat f(x_i)]^2. 
     $$
@@ -70,6 +70,18 @@ where
 </p>
 
 Bias-variance trade-off.
+
+:::
+
+## Interpretability-flexibility trade-off
+
+::: {#fig-tradeoff}
+
+<p align="center">
+![](ISL_fig_2_7.pdf){width=700px height=500px}
+</p>
+
+Trade-off of model flexibility vs interpretability.
 
 :::
 

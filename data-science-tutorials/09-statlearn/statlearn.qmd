@@ -38,8 +38,8 @@ We use the phrases **statistical learning**, **machine learning**, or simply **l
     - Classification: the output is categorical (disease or not, pattern recognition, ...).
 
 - **Unsupervised learning**: no output. We learn relationships and structure in the data. 
-    - Clustering.   
-    - Dimension reduction. 
+    - Clustering. [Example: geodemographic clustering](https://nih-r25-modelersandstorytellers.github.io/2023/data-science-tutorials/08-modeling/08-modeling.html#geodemographic-clustering)   
+    - Dimension reduction. [Example: PCA with socio-demographic characteristics ](https://nih-r25-modelersandstorytellers.github.io/2023/data-science-tutorials/08-modeling/08-modeling.html#pca) 
 
 ## Supervised learning
 
@@ -606,4 +606,4 @@ Image source: <https://people.idsia.ch/~juergen/deep-learning-history.html>
 
 - Classification problems: logistic regression (possibly with regularization and nonlinear features), discriminant analysis (LDA, QDA, NB), KNN classifier, classification tree, random forest, SVM, boosting, neural network.
 
-- Unsupervised learning: clustering, PCA, CCA, ICA, neural network (auto encoder).
+- Unsupervised learning: clustering (k-means, hierarchical, spectral), PCA, t-SNE, UMAP, CCA, ICA, neural network (auto encoder).
